@@ -4,26 +4,34 @@
 #include <stdint.h>
 #include <string.h> //NOTE(ingar): Replace with our own functions?
 
+#include "isa-logging.h"
+
 typedef struct
 {
-    bool    *Occupied;
-    void   **Pointer;
-    int     *Line;
-    char   **Function;
-    char   **File;
+    bool *Occupied;
+
+    void **Pointer;
+    char **Name;
+    
+    int   *Line;
+    char **Function;
+    char **File;
 }
 isa__allocation_collection_entry;
 
 typedef struct
 {
     uint64_t End; //Final index in the arrays
-    bool     Initialized;
+    bool Initialized;
 
-    bool    *Occupied;
-    void   **Pointer;
-    int     *Line;
-    char   **Function;
-    char   **File;
+    bool *Occupied;
+
+    void **Pointer;
+    char **Name;
+    
+    int   *Line;
+    char **Function;
+    char **File;
 }
 isa__global_allocation_collection;
 
@@ -50,23 +58,30 @@ ISA__AllocGlobalPointerCollection(uint64_t NewCapacity)
     Collection->End = NewEnd;
 
     void *OccupiedRealloc = realloc(Collection->Occupied, NewCapacity);
-    void *PointerRealloc  = realloc(Collection->Pointer,  NewCapacity);
+
+    void *PointerRealloc = realloc(Collection->Pointer, NewCapacity);
+    void *NameRealloc    = realloc(Collection->Name,    NewCapacity);
+
     void *FileRealloc     = realloc(Collection->File,     NewCapacity);
     void *FunctionRealloc = realloc(Collection->Function, NewCapacity);
     void *LineRealloc     = realloc(Collection->Line,     NewCapacity);
 
-    if(!OccupiedRealloc || !PointerRealloc  || 
+    if(!OccupiedRealloc || 
+       !PointerRealloc  || !NameRealloc     || 
        !FileRealloc     || !FunctionRealloc || !LineRealloc)
     {
         //TODO(ingar): Logging
         return false;
     }
 
-    Collection->Occupied = (bool  *) OccupiedRealloc;
-    Collection->Pointer  = (void **) PointerRealloc;
-    Collection->File     = (char **) FileRealloc;
-    Collection->Function = (char **) FunctionRealloc;
-    Collection->Line     = (int   *) LineRealloc;
+    Collection->Occupied = (bool *)OccupiedRealloc;
+
+    Collection->Pointer = (void **)PointerRealloc;
+    Collection->Name    = (char **)NameRealloc;
+
+    Collection->File     = (char **)FileRealloc;
+    Collection->Function = (char **)FunctionRealloc;
+    Collection->Line     = (int   *)LineRealloc;
 
     return true;
 }
@@ -91,18 +106,21 @@ ISA__GetGlobalAllocationCollectionEntry(void *Pointer)
 
     isa__allocation_collection_entry Entry;
 
-    Entry.Occupied = &Collection->Occupied [Idx];
-    Entry.Pointer  = &Collection->Pointer  [Idx];
-    Entry.Line     = &Collection->Line     [Idx];
-    Entry.Function = &Collection->Function [Idx];
-    Entry.File     = &Collection->File     [Idx];
+    Entry.Occupied = &Collection->Occupied[Idx];
+    
+    Entry.Pointer = &Collection->Pointer[Idx];
+    Entry.Name    = &Collection->Name[Idx];
+
+    Entry.Line     = &Collection->Line[Idx];
+    Entry.Function = &Collection->Function[Idx];
+    Entry.File     = &Collection->File[Idx];
 
     return Entry;
 }
 
 
 void
-ISA__RegisterNewAllocation(void *Pointer, int Line, const char *Function, const char *File)
+ISA__RegisterNewAllocation(void *Pointer, const char *PointerName, int Line, const char *Function, const char *File)
 {
     isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection();
     
@@ -129,25 +147,31 @@ ISA__RegisterNewAllocation(void *Pointer, int Line, const char *Function, const 
     }
 
 
+    size_t PointerNameLength  = strlen(PointerName) + 1;
     size_t FunctionNameLength = strlen(Function) + 1;
-    size_t FileNameLength     = strlen(File)     + 1;
+    size_t FileNameLength     = strlen(File) + 1;
 
-    char *FunctionNameString  = (char *)malloc(FunctionNameLength);
-    char *FileNameString      = (char *)malloc(FileNameLength);
+    char *PointerNameString  = (char *)malloc(PointerNameLength);
+    char *FunctionNameString = (char *)malloc(FunctionNameLength);
+    char *FileNameString     = (char *)malloc(FileNameLength);
 
-    if(!FunctionNameString || !FileNameString)
+    if(!PointerNameString || !FunctionNameString || !FileNameString)
     {
         //TODO(ingar): Error handling
     }
 
+    strcpy(PointerNameString,  PointerName);
     strcpy(FunctionNameString, Function);
     strcpy(FileNameString,     File);
     
-    Collection->Occupied [EntryIdx] = true;
-    Collection->Pointer  [EntryIdx] = Pointer;
-    Collection->Line     [EntryIdx] = Line;
-    Collection->Function [EntryIdx] = FunctionNameString;
-    Collection->File     [EntryIdx] = FileNameString;
+    Collection->Occupied[EntryIdx] = true;
+
+    Collection->Pointer[EntryIdx]  = Pointer;
+    Collection->Name[EntryIdx]     = PointerNameString;
+
+    Collection->Line[EntryIdx]     = Line;
+    Collection->Function[EntryIdx] = FunctionNameString;
+    Collection->File[EntryIdx]     = FileNameString;
 }
 
 /**
@@ -163,6 +187,9 @@ ISA__RemoveAllocationFromGlobalCollection(void *Pointer)
     }
 
     *Entry.Occupied = false;
+
+    free(*Entry.Name);
+
     *Entry.Line = 0;
     free(*Entry.Function);
     free(*Entry.File);
@@ -189,37 +216,39 @@ ISA__UpdateRegisteredAllocation(void *Original, void *New)
 }
 
 void *
-ISA__MallocTrace(size_t Size, int Line, const char *Function, const char *File)
+ISA__MallocTrace(size_t Size, const char *PointerName, int Line, const char *Function, const char *File)
 {
     void *Pointer = malloc(Size);
 
-    printf("MALLOC: In %s on line %d in %s:\n\n", Function, Line, File);
+    printf("MALLOC: In %s on line %d in %s:\n\n\t-> Malloc for \"%s\"\n\n", 
+            Function, Line, File, PointerName);
 #if MEM_LOG
-    ISA__RegisterNewAllocation(Pointer, Line, Function, File);
+    ISA__RegisterNewAllocation(Pointer, PointerName, Line, Function, File);
 #endif
 
     return Pointer;
 }
 
 void *
-ISA__CallocTrace(size_t ElementCount, size_t ElementSize, int Line, const char *Function, const char *File)
+ISA__CallocTrace(size_t ElementCount, size_t ElementSize, const char *PointerName, int Line, const char *Function, const char *File)
 {
     void *Pointer = calloc(ElementCount, ElementSize);
 
-    printf("CALLOC: In %s on line %d in %s\n\n", Function, Line, File);
+    printf("CALLOC: In %s on line %d in %s:\n\n\t-> Calloc for \"%s\"\n\n", 
+            Function, Line, File, PointerName);
 #if MEM_LOG
     if(!Pointer) return NULL;
-    ISA__RegisterNewAllocation(Pointer, Line, Function, File);
+    ISA__RegisterNewAllocation(Pointer, PointerName, Line, Function, File);
 #endif
 
     return Pointer;
 }
 
 void *
-ISA__ReallocTrace(void *Pointer, size_t Size, int Line, const char *Function, const char *File)
+ISA__ReallocTrace(void *Pointer, size_t Size, const char *PointerName, int Line, const char *Function, const char *File)
 {
-    printf("REALLOC: In %s on line %d in %s\n",
-            Function, Line, File);
+    printf("REALLOC: In %s on line %d in %s:\n\n\t-> Realloc for \"%s\"\n",
+            Function, Line, File, PointerName);
  
 #if MEM_LOG
     isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry(Pointer);
@@ -227,31 +256,32 @@ ISA__ReallocTrace(void *Pointer, size_t Size, int Line, const char *Function, co
     {
         //TODO(ingar): Error handling
     }
-    printf("         Previously allocated in %s on line %d in %s\n\n",
-            *Entry.Function, *Entry.Line, *Entry.File);
+    printf("\t-> Originally allocated in %s on line %d in %s as \"%s\"\n\n",
+            *Entry.Function, *Entry.Line, *Entry.File, *Entry.Name);
     ISA__RemoveAllocationFromGlobalCollection(Pointer);
 #endif
 
     void *PointerRealloc = realloc(Pointer, Size);
     if(!PointerRealloc) return NULL;
-    ISA__RegisterNewAllocation(PointerRealloc, Line, Function, File);
+    ISA__RegisterNewAllocation(PointerRealloc, PointerName, Line, Function, File);
 
     return PointerRealloc;
 }
 
 bool
-ISA__FreeTrace(void *Pointer, int Line, const char *Function, const char *File)
+ISA__FreeTrace(void *Pointer, const char *PointerName, int Line, const char *Function, const char *File)
 {
     if(!Pointer) return false;
     
-    printf("FREE: In %s on line %d in %s:\n", Function, Line, File);
+    printf("FREE: In %s on line %d in %s:\n\n\t-> Free for \"%s\"\n\n",
+            Function, Line, File, PointerName);
 #if MEM_LOG
     isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry(Pointer);
     if(!Entry.Pointer)
     {
         //TODO(ingar): Error handling
     }
-    printf("      Allocated in %s on line %d in %s\n\n", 
+    printf("\t-> Originally allocated in %s on line %d in %s\n\n", 
             *Entry.Function, *Entry.Line, *Entry.File);
     ISA__RemoveAllocationFromGlobalCollection(Pointer);
 #endif
@@ -261,17 +291,17 @@ ISA__FreeTrace(void *Pointer, int Line, const char *Function, const char *File)
 }
 
 #if MEM_TRACE
-#define malloc(Size)           ISA__MallocTrace(Size, __LINE__, __func__, __FILE__)
-#define calloc(Count, Size)    ISA__CallocTrace(Count, Size, __LINE__, __func__, __FILE__)
-#define realloc(Pointer, Size) ISA__ReallocTrace(Pointer, Size, __LINE__, __func__, __FILE__)
-#define free(Pointer)          ISA__FreeTrace(Pointer, __LINE__, __func__, __FILE__)
+#define isaMalloc(Size, Name)           ISA__MallocTrace(Size, #Name, __LINE__, __func__, __FILE__)
+#define isaCalloc(Count, Size, Name)    ISA__CallocTrace(Count, Size, #Name, __LINE__, __func__, __FILE__)
+#define isaRealloc(Pointer, Size, Name) ISA__ReallocTrace(Pointer, Size, #Name, __LINE__, __func__, __FILE__)
+#define isaFree(Pointer, Name)          ISA__FreeTrace(Pointer, #Name, __LINE__, __func__, __FILE__)
 
 #else //MEM_TRACE
 
-#define malloc(Size)           malloc(Size)
-#define calloc(Count, Size)    calloc(Count, Size)
-#define realloc(Pointer, Size) realloc(Pointer, Size)
-#define free(Pointer)          free(Pointer)
+#define isaMalloc(Size, Name)           malloc(Size)
+#define isaCalloc(Count, Size, Name)    calloc(Count, Size)
+#define isaRealloc(Pointer, Size, Name) realloc(Pointer, Size)
+#define isaFree(Pointer, Name)          free(Pointer)
 #endif//MEM_TRACE
 
 bool
@@ -299,8 +329,8 @@ isaPrintAllAllocations(void)
     {
         if(Collection->Occupied[i])
         {
-            printf("\n\tIn %s on line %d in %s\n", 
-                    Collection->Function[i], Collection->Line[i], Collection->File[i]);
+            printf("\n\t\"%s\" was allocated in %s on line %d in %s\n",
+                    Collection->Name[i], Collection->Function[i], Collection->Line[i], Collection->File[i]);
             ++nRemainingPointers;
         }
     }

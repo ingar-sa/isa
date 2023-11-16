@@ -8,8 +8,8 @@ int main(int ArgC, char **ArgV)
     bool CouldInitPointerCollection = isaInitAllocationCollection(10);
     if(!CouldInitPointerCollection) return 1;
 
-    uint8_t *SomeMemory = (uint8_t *)isaMalloc(8000, SomeMemory);
-    if(!SomeMemory) isaFree(SomeMemory, SomeMemory);
+    uint8_t *SomeMemory = (uint8_t *)malloc(8000);
+    if(!SomeMemory) free(SomeMemory);
     
 //    isaPrintArray(SomeMemory, 1, 0, 8000, 5, "%d ");
 
@@ -23,7 +23,7 @@ int main(int ArgC, char **ArgV)
 //    isaPrintArray(SomeMemory, 1, 0, 10, 5, "%d ");
 
     //isaFree(SomeMemoryRe, SomeMemoryRe);
-    isaFree(SomeMemory, SomeMemory);
+    free(SomeMemory);
     isaPrintAllAllocations();
     return 0;
 }
