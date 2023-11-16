@@ -3,20 +3,53 @@
 #include <stdio.h>
 #include <assert.h>
 
-#ifndef ISA_LOGGING_CUSTOM_CONFIG
-#include "isa-logging-default-config.h"
-#endif
+#if !defined(ISA_LOGGING_CUSTOM_CONFIG)
+#if !defined(NDEBUG)
 
-#if ISA_ASSERT_TRACE
-#define isaAssert(Expression) ISA__AssertTrace(Expression, #Expression, __LINE__, __func__, __FILE__)
-#else
-#define isaAssert(Expression) assert(Expression)
-#endif
+#define MEM_TRACE 1
+#define MEM_LOG 1
+#define ISA_ASSERT_TRACE 1
+#define ISA_ASSERT_ON_LOG_ERROR 1
+
+#define ISA_DO_LOG_INFO 1
+#define ISA_DO_LOG_ERROR 1
+#define ISA_DO_LOG_DEBUG 1
+
+#define ISA_ALL_INFO_TRACE 0
+#define ISA_ALL_ERROR_TRACE 0
+#define ISA_ALL_DEBUG_TRACE 0
+
+#define ISA_NO_INFO_TRACE 0
+#define ISA_NO_ERROR_TRACE 0
+#define ISA_NO_DEBUG_TRACE 0
+
+#else //NDEBUG
+
+#define MEM_TRACE 0
+#define MEM_LOG 0
+#define ISA_ASSERT_TRACE 0
+#define ISA_ASSERT_ON_LOG_ERROR 0
+
+#define ISA_DO_LOG_INFO 0
+#define ISA_DO_LOG_ERROR 0
+#define ISA_DO_LOG_DEBUG 0
+
+#define ISA_ALL_INFO_TRACE 0
+#define ISA_ALL_ERROR_TRACE 0
+#define ISA_ALL_DEBUG_TRACE 0
+
+#define ISA_NO_INFO_TRACE 0
+#define ISA_NO_ERROR_TRACE 0
+#define ISA_NO_DEBUG_TRACE 0
+
+#endif //NDEBUG
+#endif //ISA_LOGGING_CUSTOM_CONFIG
+
 bool
 ISA__AssertTrace(bool Expression, const char *ExpressionString, int Line, const char *Function, const char *File)
 {
-    printf("ASSERTION: In %s on line %d in %s:\n\n\t-> " 
-           "Assertion on expression \"%s\"\n", Function, Line, File, ExpressionString);
+    printf("ASSERTION: In %s on line %d in %s:\n\n" 
+           "\t-> Assertion on expression \"%s\"\n", Function, Line, File, ExpressionString);
     assert(Expression);
     return true;
 }
@@ -109,6 +142,12 @@ ISA__AssertTrace(bool Expression, const char *ExpressionString, int Line, const 
 #define ISA_LOG_DEBUG_TRACE(...) ((void)0)
 #define ISA_LOG_DEBUG(...) ((void)0)
 #endif // ISA_DO_LOG_DEBUG
+
+#if ISA_ASSERT_TRACE
+#define assert(Expression) ISA__AssertTrace(Expression, #Expression, __LINE__, __func__, __FILE__)
+#else
+#define assert(Expression) assert(Expression)
+#endif
 
 #define ISA_LOGGING_H
 #endif
