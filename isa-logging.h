@@ -1,5 +1,9 @@
 #ifndef ISA_LOGGING_H
 
+/*
+    TOOO(ingar): Make functions for the logging part and change the macros to call those.
+*/
+
 #include <stdio.h>
 #include <assert.h>
 
