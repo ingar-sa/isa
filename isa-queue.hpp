@@ -4,7 +4,7 @@
 #include <malloc.h> //TODO(ingar): Replace is isaAlloc?
 
 template <typename T>
-struct generic_queue
+struct isa_queue
 {
     uint64_t Front;
     uint64_t End;
@@ -13,12 +13,12 @@ struct generic_queue
 };
 
 template <typename T>
-generic_queue<T> *
+isa_queue<T> *
 GenericQConstruct(uint64_t Capacity)
 {
-    size_t QueueTotalSize = sizeof(generic_queue<T>) + (Capacity * sizeof(T));
+    size_t QueueTotalSize = sizeof(isa_queue<T>) + (Capacity * sizeof(T));
     
-    generic_queue<T> *Queue = (generic_queue<T> *)calloc(1, QueueTotalSize);
+    isa_queue<T> *Queue = (isa_queue<T> *)calloc(1, QueueTotalSize);
     if(!Queue) return 0;
 
     Queue->Capacity = Capacity;
@@ -30,28 +30,28 @@ GenericQConstruct(uint64_t Capacity)
 
 template <typename T>
 void
-GenericQDestruct(generic_queue<T> *Queue)
+GenericQDestruct(isa_queue<T> *Queue)
 {
     if(Queue) free(Queue);
 }
 
 template <typename T>
 bool
-GenericQIsEmpty(generic_queue<T> *Queue)
+GenericQIsEmpty(isa_queue<T> *Queue)
 {
     return Queue->Front == -1;
 }
 
 template <typename T>
 bool
-GenericQIsFull(generic_queue<T> *Queue)
+GenericQIsFull(isa_queue<T> *Queue)
 {
     return ((Queue->End + 1) % Queue->Capacity) == Queue->Front;
 }
 
 template <typename T>
 bool
-GenericQEnqueue(generic_queue<T> *Queue, uint32_t Val)
+GenericQEnqueue(isa_queue<T> *Queue, uint32_t Val)
 {
     if(GenericQIsFull(Queue)) return false;
 
@@ -65,7 +65,7 @@ GenericQEnqueue(generic_queue<T> *Queue, uint32_t Val)
 
 template <typename T>
 T
-GenericQDequeue(generic_queue<T> *Queue)
+GenericQDequeue(isa_queue<T> *Queue)
 {
     if(GenericQIsEmpty(Queue)) return 0;
 

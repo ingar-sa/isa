@@ -1,6 +1,6 @@
 #ifndef ISA_MISC_HPP
 
-#include "isa-misc-c.h"
+#include "isa-misc.h"
 
 template <typename T>
 int

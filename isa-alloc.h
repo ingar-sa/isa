@@ -330,5 +330,5 @@ isaPrintAllAllocations(void)
 #define free(Pointer)          free(Pointer)
 #endif//MEM_TRACE
 
-#define ISA_MISC_HPP
+#define ISA_ALLOC_H
 #endif
