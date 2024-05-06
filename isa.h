@@ -1,9 +1,7 @@
-#ifndef ISA_H
+#ifndef ISA_H_
 
-#if 0
 #if(defined(_WIN32) || defined(_WIN64)) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
-#endif
 #endif
 
 /*
@@ -11,13 +9,19 @@
 */
 
 #include <assert.h>
-#include <chrono>
 #include <float.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> //NOTE(ingar): Replace with our own functions?
 
+#if 0 // defined(_cplusplus)
+extern "C"
+{
+#endif
 ////////////////////////////////////////
 //              DEFINES               //
 ////////////////////////////////////////
@@ -31,10 +35,6 @@ typedef int8_t  i8;
 typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
-
-#if !defined(_cplusplus)
-#include <stdbool.h>
-#endif
 
 ////////////////////////////////////////
 //                MISC                //
@@ -85,12 +85,12 @@ IsaMemZero(void *Mem, size_t Size)
 
 #define IsaMemZeroStruct(struct) IsaMemZero(struct, sizeof(*struct))
 
-struct isa_arena
+typedef struct isa_arena
 {
     u8    *Mem;
     size_t Top;
     size_t Size;
-};
+} isa_arena;
 
 isa_arena
 IsaArenaCreate(void *Mem, size_t Size)
@@ -108,8 +108,8 @@ IsaArenaDestroy(isa_arena **Arena)
 {
     if(Arena && *Arena)
     {
-        *Arena = nullptr;
-        Arena  = nullptr;
+        *Arena = NULL;
+        Arena  = NULL;
     }
 }
 
@@ -166,11 +166,11 @@ IsaArenaClear(isa_arena *Arena)
 #define IsaPushStructZero(arena, type) IsaPushArrayZero((arena), (type), 1)
 
 #define ISA_DEFINE_POOL_ALLOCATOR(type)                                                                                \
-    struct type##_pool                                                                                                 \
+    typedef struct type##_Pool                                                                                         \
     {                                                                                                                  \
         isa_arena *Arena;                                                                                              \
         type      *FirstFree;                                                                                          \
-    };                                                                                                                 \
+    } type##_pool;                                                                                                     \
                                                                                                                        \
     type *type##Alloc(type##_pool *Pool)                                                                               \
     {                                                                                                                  \
@@ -195,7 +195,7 @@ IsaArenaClear(isa_arena *Arena)
     }
 
 #define ISA_CREATE_POOL_ALLOCATOR(Name, type, Arena)                                                                   \
-    type##_pool Name;                                                                                                  \
+    type##_Pool Name;                                                                                                  \
     Name.Arena     = Arena;                                                                                            \
     Name.FirstFree = 0;
 
@@ -523,7 +523,7 @@ IsaPrintAllAllocations(void)
         }
     }
 
-    printf("\nDBEUG: There are %lu remaining allocations\n\n", Collection->AllocationCount);
+    printf("\nDBEUG: There are %llu remaining allocations\n\n", Collection->AllocationCount);
 }
 
 ////////////////////////////////////////
@@ -652,13 +652,13 @@ IsaWrite_file_data_ToFile(Isa_file_data *FileData, const char *Filename)
 
 // TODO(ingar): This is not a general purpose tokenizer,
 // but it is an example of an implementation
-struct Isa_token
+typedef struct isa_token
 {
     char  *Start;
     size_t Len;
-};
+} isa_token;
 
-Isa_token
+isa_token
 IsaGetNextToken(char **Cursor)
 {
     while('\t' != **Cursor)
@@ -668,7 +668,7 @@ IsaGetNextToken(char **Cursor)
 
     (*Cursor)++; // Skips to start of hex number
 
-    Isa_token Token;
+    isa_token Token;
     Token.Start = *Cursor;
     Token.Len   = 0;
 
@@ -697,154 +697,118 @@ IsaGetNextToken(char **Cursor)
 
 #if !defined(NDEBUG)
 
-#define MEM_TRACE 1
-#define MEM_LOG 1
-#define ISA_ASSERT_TRACE 1
-#define ISA_ASSERT_ON_LOG_ERROR 1
+#define OEC_LOG_LEVEL_NONE (0U)
+#define OEC_LOG_LEVEL_ERR (1U)
+#define OEC_LOG_LEVEL_WRN (2U)
+#define OEC_LOG_LEVEL_INF (3U)
+#define OEC_LOG_LEVEL_DBG (4U)
 
-#define ISA_DO_LOG_INFO 1
-#define ISA_DO_LOG_ERROR 1
-#define ISA_DO_LOG_DEBUG 1
+#define OEC_LOG_LEVEL_CHECK(level) (OEC_LOG_LEVEL >= OEC_LOG_LEVEL_##level ? 1 : 0)
 
-#define ISA_ALL_INFO_TRACE 0
-#define ISA_ALL_ERROR_TRACE 0
-#define ISA_ALL_DEBUG_TRACE 0
-
-#define ISA_NO_INFO_TRACE 0
-#define ISA_NO_ERROR_TRACE 0
-#define ISA_NO_DEBUG_TRACE 0
-
-#else // NDEBUG
-
-#define MEM_TRACE 0
-#define MEM_LOG 0
-#define ISA_ASSERT_TRACE 0
-#define ISA_ASSERT_ON_LOG_ERROR 0
-
-#define ISA_DO_LOG_INFO 0
-#define ISA_DO_LOG_ERROR 0
-#define ISA_DO_LOG_DEBUG 0
-
-#define ISA_ALL_INFO_TRACE 0
-#define ISA_ALL_ERROR_TRACE 0
-#define ISA_ALL_DEBUG_TRACE 0
-
-#define ISA_NO_INFO_TRACE 0
-#define ISA_NO_ERROR_TRACE 0
-#define ISA_NO_DEBUG_TRACE 0
-
-#endif // NDEBUG
-
-bool
-ISA__AssertTrace(bool Expression, const char *ExpressionString, int Line, const char *Function, const char *File)
+struct oec_log_module_
 {
-    printf("ASSERTION: In %s on line %d in %s:\n\n"
-           "\t-> Assertion on expression \"%s\"\n",
-           Function, Line, File, ExpressionString);
-    assert(Expression);
-    return true;
+    char               buf[OEC_LOG_BUF_SIZE];
+    size_t             buf_size;
+    struct oec_stream *stream;
+    const char        *name;
+};
+
+/**
+ * Redirects to printf
+ */
+ssize_t oec_log_default_stream_write__(struct oec_stream *, void *, size_t);
+
+#define OEC_LOG_REGISTER(module_name)                                                                                  \
+    static struct oec_stream oec_log_default_stream__ = {                                                              \
+        .data  = NULL,                                                                                                 \
+        .read  = NULL,                                                                                                 \
+        .write = oec_log_default_stream_write__,                                                                       \
+    };                                                                                                                 \
+                                                                                                                       \
+    struct oec_log_module_ OEC_CONCAT3(oec_log_instance_, module_name, __) __attribute__((used))                       \
+    = { .buf = { 0 }, .buf_size = OEC_LOG_BUF_SIZE, .stream = &oec_log_default_stream__, .name = #module_name };       \
+                                                                                                                       \
+    static struct oec_log_module_ *oec_log_instance__ = &OEC_CONCAT3(oec_log_instance_, module_name, __)
+
+#define OEC_LOG_DECLARE(name)                                                                                          \
+    extern struct oec_log_module_  OEC_CONCAT3(oec_log_instance_, name, __);                                           \
+    static struct oec_log_module_ *oec_log_instance__ = &OEC_CONCAT3(oec_log_instance_, name, __)
+
+#define OEC_LOG_SET_STREAM(new_stream)                                                                                 \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        oec_log_instance__->stream = new_stream;                                                                       \
+    } while(0)
+
+int oec_write_log_(struct oec_log_module_ *, const char *, ...);
+#define OEC_LOG__(log_level, ...)                                                                                      \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if(OEC_LOG_LEVEL_CHECK(log_level))                                                                             \
+        {                                                                                                              \
+            int ret = oec_write_log_(oec_log_instance__, #log_level, __VA_ARGS__);                                     \
+            assert(0 == ret);                                                                                          \
+        }                                                                                                              \
+    } while(0)
+
+#define OEC_LOG_DBG(...) OEC_LOG__(DBG, __VA_ARGS__)
+
+#define OEC_LOG_INF(...) OEC_LOG__(INF, __VA_ARGS__)
+
+#define OEC_LOG_WRN(...) OEC_LOG__(WRN, __VA_ARGS__)
+
+#define OEC_LOG_ERR(...) OEC_LOG__(ERR, __VA_ARGS__)
+
+OEC_END_DECL__
+
+int
+oec_write_log_(struct oec_log_module_ *module, const char *log_level, ...)
+{
+    time_t    posix_time;
+    struct tm time_info;
+
+    (void)time(&posix_time);
+    (void)localtime_r(&posix_time, &time_info);
+
+    size_t buf_remaining = module->buf_size;
+    size_t chars_written = strftime(module->buf, module->buf_size, "%T: ", &time_info);
+
+    if(0 == chars_written)
+    {
+        return -1;
+    }
+
+    buf_remaining -= chars_written;
+
+    int ret = snprintf(module->buf + chars_written, buf_remaining, "%s: %s: ", module->name, log_level);
+    if((ret < 0) || ((size_t)ret >= buf_remaining))
+    {
+        return -1;
+    }
+
+    chars_written += ret;
+    buf_remaining -= ret;
+
+    va_list args;
+    va_start(args, log_level);
+
+    const char *fmt;
+    fmt = va_arg(args, const char *);
+
+    chars_written += vsnprintf(module->buf + chars_written, buf_remaining, fmt, args);
+
+    va_end(args);
+
+    if(chars_written > module->buf_size)
+    {
+        return -1;
+    }
+
+    oec_errno err = oec_stream_write(module->stream, module->buf, chars_written);
+
+    return err < 0 ? -1 : 0;
 }
-
-#if ISA_ASSERT_ON_LOG_ERROR
-#define ISA_ErrAssert(Expression) assert(Expression)
-#else
-#define ISA_ErrAssert(Expression) ((void)0)
-#endif
-
-#if ISA_DO_LOG_INFO
-#if ISA_ALL_INFO_TRACE
-#define ISA_LOG_INFO(...) ISA_LOG_INFO_TRACE(__VA_ARGS__)
-#else
-#define ISA_LOG_INFO(...)                                                                                              \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        printf("INFO: ");                                                                                              \
-        printf(__VA_ARGS__);                                                                                           \
-        printf("\n");                                                                                                  \
-    } while(0)
-#endif // ISA_ALL_INFO_TRACE
-
-#if ISA_NO_INFO_TRACE
-#define ISA_LOG_INFO_TRACE(...) ISA_LOG_INFO(__VA_ARGS__)
-#else
-#define ISA_LOG_INFO_TRACE(...)                                                                                        \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        printf("INFO: In %s on line %d in %s:\n\n\t-> ", __func__, __LINE__, __FILE__);                                \
-        printf(__VA_ARGS__);                                                                                           \
-        printf("\n");                                                                                                  \
-    } while(0)
-#endif // ISA_NO_INFO_TRACE
-#else
-#define ISA_LOG_INFO(...) ((void)0)
-#define ISA_LOG_INFO_TRACE(...) ((void)0)
-#endif // ISA_DO_LOG_INFO
-
-#if ISA_DO_LOG_ERROR
-#if ISA_ALL_ERROR_TRACE
-#define ISA_LOG_ERROR(...) ISA_LOG_ERROR_TRACE(__VA_ARGS__)
-#else
-#define ISA_LOG_ERROR(...)                                                                                             \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        printf("ERROR: ");                                                                                             \
-        fprintf(stderr, __VA_ARGS__);                                                                                  \
-        fprintf(stderr, "\n");                                                                                         \
-        ISA_ErrAssert(false);                                                                                          \
-    } while(0)
-#endif // ISA_ALL_ERROR_TRACE
-
-#if ISA_NO_ERROR_TRACE
-#define ISA_LOG_ERROR_TRACE(...) ISA_LOG_ERROR(__VA_ARGS__)
-#else
-#define ISA_LOG_ERROR_TRACE(...)                                                                                       \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        fprintf(stderr, "ERROR: In %s on line %d in %s:\n\n\t-> ", __func__, __LINE__, __FILE__);                      \
-        fprintf(stderr, __VA_ARGS__);                                                                                  \
-        fprintf(stderr, "\n");                                                                                         \
-        ISA_ErrAssert(false);                                                                                          \
-    } while(0)
-#endif // ISA_NO_ERROR_TRACE
-#else
-#define ISA_LOG_ERROR_TRACE(...) ((void)0)
-#define ISA_LOG_ERROR(...) ((void)0)
-#endif // ISA_DO_LOG_ERROR
-
-#if ISA_DO_LOG_DEBUG
-#if ISA_ALL_DEBUG_TRACE
-#define ISA_LOG_DEBUG(...) ISA_LOG_DEBUG_TRACE(__VA_ARGS__)
-#else
-#define ISA_LOG_DEBUG(...)                                                                                             \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        printf("DEBUG: ");                                                                                             \
-        printf(__VA_ARGS__);                                                                                           \
-        printf("\n");                                                                                                  \
-    } while(0)
-#endif
-
-#if ISA_NO_DEBUG_TRACE
-#define ISA_LOG_DEBUG_TRACE(...) ISA_LOG_DEBUG(__VA_ARGS__)
-#else
-#define ISA_LOG_DEBUG_TRACE(...)                                                                                       \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        printf("DEBUG: In %s on line %d in %s:\n\n\t-> ", __func__, __LINE__, __FILE__);                               \
-        printf(__VA_ARGS__);                                                                                           \
-        printf("\n");                                                                                                  \
-    } while(0);
-#endif // ISA_NO_DEBUG_TRACE
-#else
-#define ISA_LOG_DEBUG_TRACE(...) ((void)0)
-#define ISA_LOG_DEBUG(...) ((void)0)
-#endif // ISA_DO_LOG_DEBUG
-
-#if ISA_ASSERT_TRACE
-#define IsaAssert(Expression) ISA__AssertTrace(Expression, #Expression, __LINE__, __func__, __FILE__)
-#else
-#define IsaAssert(Expression) assert(Expression)
-#endif
+#endif // NDEBUG
 
 ////////////////////////////////////////
 //               MACROS               //
@@ -866,5 +830,9 @@ ISA__AssertTrace(bool Expression, const char *ExpressionString, int Line, const 
 #define free(Pointer) free(Pointer)
 #endif // MEM_TRACE
 
-#define ISA_H
+#if 0 // defined(_cplusplus)
+}
+#endif
+
+#define ISA_H_
 #endif
