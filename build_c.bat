@@ -11,7 +11,7 @@ set FileOutputs=/Fe%BuildFolder%\ /Fo%BuildFolder%\ /Fd%BuildFolder%\
 set Libs=user32.lib kernel32.lib gdi32.lib
 
 set Includes=/I"."
-set CommonCompilerFlags=/MTd /nologo /GL /GR- /Od /Oi /W4 /wd4201 /wd4100 /wd4189 /wd4505 /Zi /DUNICODE /std:c17 %Includes% %FileOutputs%
+set CommonCompilerFlags=/MTd /nologo /GL /GR- /Od /Oi /W4 /wd4200 /wd4201 /wd4100 /wd4189 /wd4505 /Zi /DUNICODE /std:c17 %Includes% %FileOutputs%
 set CommonLinkerFlags=/Fm%BuildFolder%\ /link %Libs%
 
 del *.pdb > NUL 2> NUL
