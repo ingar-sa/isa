@@ -1,9 +1,7 @@
-#ifndef ISA_H
+#ifndef ISA_H_
 
-#if 0
-#if (defined(_WIN32) || defined(_WIN64)) && !defined(_CRT_SECURE_NO_WARNINGS)
+#if(defined(_WIN32) || defined(_WIN64)) && !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
-#endif
 #endif
 
 /*
@@ -11,13 +9,19 @@
 */
 
 #include <assert.h>
-#include <chrono>
 #include <float.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> //NOTE(ingar): Replace with our own functions?
 
+#if 0 // defined(_cplusplus)
+extern "C"
+{
+#endif
 ////////////////////////////////////////
 //              DEFINES               //
 ////////////////////////////////////////
@@ -32,30 +36,26 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-#if !defined(_cplusplus)
-#include <stdbool.h>
-#endif
-
 ////////////////////////////////////////
 //                MISC                //
 ////////////////////////////////////////
 
 #define KiloByte(Number) (Number * 1024ULL)
-#define MegaByte(Number) (KiloByte (Number) * 1024ULL)
-#define GigaByte(Number) (MegaByte (Number) * 1024ULL)
-#define TeraByte(Number) (GigaByte (Number) * 1024ULL)
+#define MegaByte(Number) (KiloByte(Number) * 1024ULL)
+#define GigaByte(Number) (MegaByte(Number) * 1024ULL)
+#define TeraByte(Number) (GigaByte(Number) * 1024ULL)
 
-#define IsaArrayLen(Array) (sizeof (Array) / sizeof (Array[0]))
+#define IsaArrayLen(Array) (sizeof(Array) / sizeof(Array[0]))
 
 bool
-IsaDoubleEpsilonCompare (const double A, const double B)
+IsaDoubleEpsilonCompare(const double A, const double B)
 {
-    double GreatestValue = (fabs (A) < fabs (B)) ? fabs (B) : fabs (A);
-    return fabs (A - B) <= (GreatestValue * DBL_EPSILON);
+    double GreatestValue = (fabs(A) < fabs(B)) ? fabs(B) : fabs(A);
+    return fabs(A - B) <= (GreatestValue * DBL_EPSILON);
 }
 
 uint64_t
-IsaDoubleSignBit (double F)
+IsaDoubleSignBit(double F)
 {
     uint64_t  Mask = 1ULL << 63;
     uint64_t *Comp = (uint64_t *)&F;
@@ -64,7 +64,7 @@ IsaDoubleSignBit (double F)
 }
 
 double
-IsaRadiansFromDegrees (double Degrees)
+IsaRadiansFromDegrees(double Degrees)
 {
     double Radians = 0.01745329251994329577f * Degrees;
     return Radians;
@@ -75,25 +75,25 @@ IsaRadiansFromDegrees (double Degrees)
 ////////////////////////////////////////
 
 void
-IsaMemZero (void *Mem, size_t Size)
+IsaMemZero(void *Mem, size_t Size)
 {
-    for (size_t i = 0; i < Size; ++i)
+    for(size_t i = 0; i < Size; ++i)
     {
         ((u8 *)Mem)[i] = 0;
     }
 }
 
-#define IsaMemZeroStruct(struct) IsaMemZero (struct, sizeof (*struct))
+#define IsaMemZeroStruct(struct) IsaMemZero(struct, sizeof(*struct))
 
-struct isa_arena
+typedef struct isa_arena
 {
     u8    *Mem;
     size_t Top;
     size_t Size;
-};
+} isa_arena;
 
 isa_arena
-IsaArenaCreate (void *Mem, size_t Size)
+IsaArenaCreate(void *Mem, size_t Size)
 {
     isa_arena Arena;
     Arena.Mem  = (u8 *)Mem;
@@ -104,17 +104,17 @@ IsaArenaCreate (void *Mem, size_t Size)
 }
 
 void
-IsaArenaDestroy (isa_arena **Arena)
+IsaArenaDestroy(isa_arena **Arena)
 {
-    if (Arena && *Arena)
+    if(Arena && *Arena)
     {
-        *Arena = nullptr;
-        Arena  = nullptr;
+        *Arena = NULL;
+        Arena  = NULL;
     }
 }
 
 void *
-IsaArenaPush (isa_arena *Arena, size_t Size)
+IsaArenaPush(isa_arena *Arena, size_t Size)
 {
     u8 *AllocedMem = Arena->Mem + Arena->Top;
     Arena->Top += Size;
@@ -123,81 +123,80 @@ IsaArenaPush (isa_arena *Arena, size_t Size)
 }
 
 void *
-IsaArenaPushZero (isa_arena *Arena, size_t Size)
+IsaArenaPushZero(isa_arena *Arena, size_t Size)
 {
     u8 *AllocedMem = Arena->Mem + Arena->Top;
-    IsaMemZero (AllocedMem, Size);
+    IsaMemZero(AllocedMem, Size);
     Arena->Top += Size;
 
     return (void *)AllocedMem;
 }
 
 void
-IsaArenaPop (isa_arena *Arena, size_t Size)
+IsaArenaPop(isa_arena *Arena, size_t Size)
 {
-    assert (Arena->Top >= Size);
+    assert(Arena->Top >= Size);
     Arena->Top -= Size;
 }
 
 size_t
-IsaArenaGetPos (isa_arena *Arena)
+IsaArenaGetPos(isa_arena *Arena)
 {
     size_t Result = Arena->Top;
     return Result;
 }
 
 void
-IsaArenaSeek (isa_arena *Arena, size_t Pos)
+IsaArenaSeek(isa_arena *Arena, size_t Pos)
 {
-    assert (0 <= Pos && Pos <= Arena->Size);
+    assert(0 <= Pos && Pos <= Arena->Size);
     Arena->Top = Pos;
 }
 
 void
-IsaArenaClear (isa_arena *Arena)
+IsaArenaClear(isa_arena *Arena)
 {
     Arena->Top = 0;
 }
 
-#define IsaPushArray(arena, type, count) (type *)IsaArenaPush ((arena), sizeof (type) * (count))
-#define IsaPushArrayZero(arena, type, count)                                                       \
-    (type *)IsaArenaPushZero ((arena), sizeof (type) * (count))
+#define IsaPushArray(arena, type, count) (type *)IsaArenaPush((arena), sizeof(type) * (count))
+#define IsaPushArrayZero(arena, type, count) (type *)IsaArenaPushZero((arena), sizeof(type) * (count))
 
-#define IsaPushStruct(arena, type) PushArray ((arena), (type), 1)
-#define IsaPushStructZero(arena, type) IsaPushArrayZero ((arena), (type), 1)
+#define IsaPushStruct(arena, type) PushArray((arena), (type), 1)
+#define IsaPushStructZero(arena, type) IsaPushArrayZero((arena), (type), 1)
 
-#define ISA_DEFINE_POOL_ALLOCATOR(type)                                                            \
-    struct type##_pool                                                                             \
-    {                                                                                              \
-        isa_arena *Arena;                                                                          \
-        type      *FirstFree;                                                                      \
-    };                                                                                             \
-                                                                                                   \
-    type *type##Alloc (type##_pool *Pool)                                                          \
-    {                                                                                              \
-        type *Result = Pool->FirstFree;                                                            \
-        if (Result)                                                                                \
-        {                                                                                          \
-            Pool->FirstFree = Pool->FirstFree->Next;                                               \
-            IsaMemZeroStruct (Result);                                                             \
-        }                                                                                          \
-        else                                                                                       \
-        {                                                                                          \
-            Result = IsaPushStructZero (Pool->Arena, type);                                        \
-        }                                                                                          \
-                                                                                                   \
-        return Result;                                                                             \
-    }                                                                                              \
-                                                                                                   \
-    void type##Release (type##_pool *Pool, type *Instance)                                         \
-    {                                                                                              \
-        Instance->Next  = Pool->FirstFree;                                                         \
-        Pool->FirstFree = Instance;                                                                \
+#define ISA_DEFINE_POOL_ALLOCATOR(type)                                                                                \
+    typedef struct type##_Pool                                                                                         \
+    {                                                                                                                  \
+        isa_arena *Arena;                                                                                              \
+        type      *FirstFree;                                                                                          \
+    } type##_pool;                                                                                                     \
+                                                                                                                       \
+    type *type##Alloc(type##_pool *Pool)                                                                               \
+    {                                                                                                                  \
+        type *Result = Pool->FirstFree;                                                                                \
+        if(Result)                                                                                                     \
+        {                                                                                                              \
+            Pool->FirstFree = Pool->FirstFree->Next;                                                                   \
+            IsaMemZeroStruct(Result);                                                                                  \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            Result = IsaPushStructZero(Pool->Arena, type);                                                             \
+        }                                                                                                              \
+                                                                                                                       \
+        return Result;                                                                                                 \
+    }                                                                                                                  \
+                                                                                                                       \
+    void type##Release(type##_pool *Pool, type *Instance)                                                              \
+    {                                                                                                                  \
+        Instance->Next  = Pool->FirstFree;                                                                             \
+        Pool->FirstFree = Instance;                                                                                    \
     }
 
-#define ISA_CREATE_POOL_ALLOCATOR(Name, type, Arena)                                               \
-    type##_pool Name;                                                                              \
-    Name.Arena     = Arena;                                                                        \
+#define ISA_CREATE_POOL_ALLOCATOR(Name, type, Arena)                                                                   \
+    type##_Pool Name;                                                                                                  \
+    Name.Arena     = Arena;                                                                                            \
     Name.FirstFree = 0;
 
 ////////////////////////////////////////
@@ -227,7 +226,7 @@ typedef struct
 } Isa__global_allocation_collection;
 
 Isa__global_allocation_collection *
-ISA__GetGlobalAllocationCollection ()
+ISA__GetGlobalAllocationCollection()
 {
     static Isa__global_allocation_collection Collection = { 0 };
     return &Collection;
@@ -238,11 +237,11 @@ ISA__GetGlobalAllocationCollection ()
 //  but the memory will not be zeroed the first time around, so we might want to
 //  do something about that
 bool
-ISA__AllocGlobalPointerCollection (uint64_t NewCapacity)
+ISA__AllocGlobalPointerCollection(uint64_t NewCapacity)
 {
-    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection ();
+    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection();
     uint64_t                           NewEnd     = NewCapacity - 1;
-    if (Collection->End >= NewEnd)
+    if(Collection->End >= NewEnd)
     {
         // TODO(ingar): Error handling
         return false;
@@ -250,13 +249,13 @@ ISA__AllocGlobalPointerCollection (uint64_t NewCapacity)
 
     Collection->End = NewEnd;
 
-    void *OccupiedRealloc = realloc (Collection->Occupied, NewCapacity);
-    void *PointerRealloc  = realloc (Collection->Pointer, NewCapacity);
-    void *FunctionRealloc = realloc (Collection->Function, NewCapacity);
-    void *LineRealloc     = realloc (Collection->Line, NewCapacity);
-    void *FileRealloc     = realloc (Collection->File, NewCapacity);
+    void *OccupiedRealloc = realloc(Collection->Occupied, NewCapacity);
+    void *PointerRealloc  = realloc(Collection->Pointer, NewCapacity);
+    void *FunctionRealloc = realloc(Collection->Function, NewCapacity);
+    void *LineRealloc     = realloc(Collection->Line, NewCapacity);
+    void *FileRealloc     = realloc(Collection->File, NewCapacity);
 
-    if (!OccupiedRealloc || !PointerRealloc || !FunctionRealloc || !LineRealloc || !FileRealloc)
+    if(!OccupiedRealloc || !PointerRealloc || !FunctionRealloc || !LineRealloc || !FileRealloc)
     {
         // TODO(ingar): Error handling
         return false;
@@ -272,20 +271,20 @@ ISA__AllocGlobalPointerCollection (uint64_t NewCapacity)
 }
 
 Isa__allocation_collection_entry
-ISA__GetGlobalAllocationCollectionEntry (void *Pointer)
+ISA__GetGlobalAllocationCollectionEntry(void *Pointer)
 {
-    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection ();
+    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection();
 
     uint64_t Idx = 0;
-    for (; Idx <= Collection->End; ++Idx)
+    for(; Idx <= Collection->End; ++Idx)
     {
-        if (Collection->Pointer[Idx] == Pointer)
+        if(Collection->Pointer[Idx] == Pointer)
         {
             break;
         }
     }
 
-    if (Idx > Collection->End)
+    if(Idx > Collection->End)
     {
         // TODO(ingar): Error handling
         Isa__allocation_collection_entry Entry = { 0 };
@@ -304,45 +303,45 @@ ISA__GetGlobalAllocationCollectionEntry (void *Pointer)
 }
 
 void
-ISA__RegisterNewAllocation (void *Pointer, const char *Function, int Line, const char *File)
+ISA__RegisterNewAllocation(void *Pointer, const char *Function, int Line, const char *File)
 {
-    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection ();
+    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection();
 
     // TODO(ingar): This loop should never fail if we don't run out of memory
     //  but I should still add some error handling at some point
     uint64_t EntryIdx = 0;
-    for (uint64_t i = 0; i <= Collection->End; ++i)
+    for(uint64_t i = 0; i <= Collection->End; ++i)
     {
-        if (i > Collection->End)
+        if(i > Collection->End)
         {
             uint64_t NewCapacity = (uint64_t)(1.5 * (double)Collection->End);
-            if (NewCapacity <= Collection->End)
+            if(NewCapacity <= Collection->End)
             {
                 // TODO(ingar): Handle wrapping
             }
-            ISA__AllocGlobalPointerCollection (NewCapacity);
+            ISA__AllocGlobalPointerCollection(NewCapacity);
         }
 
-        if (!Collection->Occupied[i])
+        if(!Collection->Occupied[i])
         {
             EntryIdx = i;
             break;
         }
     }
 
-    size_t FunctionNameLength = strlen (Function) + 1;
-    size_t FileNameLength     = strlen (File) + 1;
+    size_t FunctionNameLength = strlen(Function) + 1;
+    size_t FileNameLength     = strlen(File) + 1;
 
-    char *FunctionNameString = (char *)malloc (FunctionNameLength);
-    char *FileNameString     = (char *)malloc (FileNameLength);
+    char *FunctionNameString = (char *)malloc(FunctionNameLength);
+    char *FileNameString     = (char *)malloc(FileNameLength);
 
-    if (!FunctionNameString || !FileNameString)
+    if(!FunctionNameString || !FileNameString)
     {
         // TODO(ingar): Error handling
     }
 
-    strcpy (FunctionNameString, Function);
-    strcpy (FileNameString, File);
+    strcpy(FunctionNameString, Function);
+    strcpy(FileNameString, File);
 
     Collection->Occupied[EntryIdx] = true;
     Collection->Pointer[EntryIdx]  = Pointer;
@@ -357,37 +356,37 @@ ISA__RegisterNewAllocation (void *Pointer, const char *Function, int Line, const
  * @note Assumes that Pointer is not null
  */
 void
-ISA__RemoveAllocationFromGlobalCollection (void *Pointer)
+ISA__RemoveAllocationFromGlobalCollection(void *Pointer)
 {
-    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry (Pointer);
-    if (!Entry.Pointer)
+    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry(Pointer);
+    if(!Entry.Pointer)
     {
         // TODO(ingar): Error handling
     }
 
     *Entry.Occupied = false;
     *Entry.Line     = 0;
-    free (*Entry.Function);
-    free (*Entry.File);
+    free(*Entry.Function);
+    free(*Entry.File);
 
-    ISA__GetGlobalAllocationCollection ()->AllocationCount--;
+    ISA__GetGlobalAllocationCollection()->AllocationCount--;
 }
 
 void
-ISA__UpdateRegisteredAllocation (void *Original, void *New)
+ISA__UpdateRegisteredAllocation(void *Original, void *New)
 {
-    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection ();
+    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection();
 
     uint64_t Idx = 0;
-    for (; Idx <= Collection->End; ++Idx)
+    for(; Idx <= Collection->End; ++Idx)
     {
-        if (Collection->Pointer[Idx] == Original)
+        if(Collection->Pointer[Idx] == Original)
         {
             break;
         }
     }
 
-    if (Idx > Collection->End)
+    if(Idx > Collection->End)
     {
         // TODO(ingar): Error handling
         return;
@@ -397,102 +396,99 @@ ISA__UpdateRegisteredAllocation (void *Original, void *New)
 }
 
 void *
-ISA__MallocTrace (size_t Size, const char *Function, int Line, const char *File)
+ISA__MallocTrace(size_t Size, const char *Function, int Line, const char *File)
 {
-    void *Pointer = malloc (Size);
+    void *Pointer = malloc(Size);
 
-    printf ("MALLOC: In %s on line %d in %s:\n\n", Function, Line, File);
+    printf("MALLOC: In %s on line %d in %s:\n\n", Function, Line, File);
 #if MEM_LOG
-    ISA__RegisterNewAllocation (Pointer, Function, Line, File);
+    ISA__RegisterNewAllocation(Pointer, Function, Line, File);
 #endif
 
     return Pointer;
 }
 
 void *
-ISA__CallocTrace (size_t ElementCount, size_t ElementSize, const char *Function, int Line,
-                  const char *File)
+ISA__CallocTrace(size_t ElementCount, size_t ElementSize, const char *Function, int Line, const char *File)
 {
-    void *Pointer = calloc (ElementCount, ElementSize);
+    void *Pointer = calloc(ElementCount, ElementSize);
 
-    printf ("CALLOC: In %s on line %d in %s\n\n", Function, Line, File);
+    printf("CALLOC: In %s on line %d in %s\n\n", Function, Line, File);
 #if MEM_LOG
-    if (!Pointer)
+    if(!Pointer)
     {
         return NULL;
     }
-    ISA__RegisterNewAllocation (Pointer, Function, Line, File);
+    ISA__RegisterNewAllocation(Pointer, Function, Line, File);
 #endif
 
     return Pointer;
 }
 
 void *
-ISA__ReallocTrace (void *Pointer, size_t Size, const char *Function, int Line, const char *File)
+ISA__ReallocTrace(void *Pointer, size_t Size, const char *Function, int Line, const char *File)
 {
-    if (!Pointer)
+    if(!Pointer)
     {
         return NULL;
     }
 
-    printf ("REALLOC: In %s on line %d in %s\n", Function, Line, File);
+    printf("REALLOC: In %s on line %d in %s\n", Function, Line, File);
 #if MEM_LOG
-    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry (Pointer);
-    if (!Entry.Pointer)
+    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry(Pointer);
+    if(!Entry.Pointer)
     {
         // TODO(ingar): Error handling
     }
-    printf ("         Previously allocated in %s on line %d in %s\n\n", *Entry.Function,
-            *Entry.Line, *Entry.File);
-    ISA__RemoveAllocationFromGlobalCollection (Pointer);
+    printf("         Previously allocated in %s on line %d in %s\n\n", *Entry.Function, *Entry.Line, *Entry.File);
+    ISA__RemoveAllocationFromGlobalCollection(Pointer);
 #endif
 
-    void *PointerRealloc = realloc (Pointer, Size);
-    if (!PointerRealloc)
+    void *PointerRealloc = realloc(Pointer, Size);
+    if(!PointerRealloc)
     {
         return NULL;
     }
-    ISA__RegisterNewAllocation (PointerRealloc, Function, Line, File);
+    ISA__RegisterNewAllocation(PointerRealloc, Function, Line, File);
 
     return PointerRealloc;
 }
 
 bool
-ISA__FreeTrace (void *Pointer, const char *Function, int Line, const char *File)
+ISA__FreeTrace(void *Pointer, const char *Function, int Line, const char *File)
 {
-    if (!Pointer)
+    if(!Pointer)
     {
         return false;
     }
 
-    printf ("FREE: In %s on line %d in %s:\n", Function, Line, File);
+    printf("FREE: In %s on line %d in %s:\n", Function, Line, File);
 #if MEM_LOG
-    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry (Pointer);
-    if (!Entry.Pointer)
+    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry(Pointer);
+    if(!Entry.Pointer)
     {
         // TODO(ingar): Error handling
     }
-    printf ("      Allocated in %s on line %d in %s\n\n", *Entry.Function, *Entry.Line,
-            *Entry.File);
-    ISA__RemoveAllocationFromGlobalCollection (Pointer);
+    printf("      Allocated in %s on line %d in %s\n\n", *Entry.Function, *Entry.Line, *Entry.File);
+    ISA__RemoveAllocationFromGlobalCollection(Pointer);
 #endif
 
-    free (Pointer);
+    free(Pointer);
     return true;
 }
 
 bool
-IsaInitAllocationCollection (uint64_t Capacity)
+IsaInitAllocationCollection(uint64_t Capacity)
 {
-    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection ();
+    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection();
 
-    void *OccupiedRealloc = calloc (Capacity, sizeof (bool));
-    void *PointerRealloc  = calloc (Capacity, sizeof (void *));
-    void *FunctionRealloc = calloc (Capacity, sizeof (void *));
-    void *LineRealloc     = calloc (Capacity, sizeof (void *));
-    void *FileRealloc     = calloc (Capacity, sizeof (void *));
+    void *OccupiedRealloc = calloc(Capacity, sizeof(bool));
+    void *PointerRealloc  = calloc(Capacity, sizeof(void *));
+    void *FunctionRealloc = calloc(Capacity, sizeof(void *));
+    void *LineRealloc     = calloc(Capacity, sizeof(void *));
+    void *FileRealloc     = calloc(Capacity, sizeof(void *));
 
-    if (!OccupiedRealloc || !PointerRealloc || !FunctionRealloc || !LineRealloc || !FileRealloc)
+    if(!OccupiedRealloc || !PointerRealloc || !FunctionRealloc || !LineRealloc || !FileRealloc)
     {
         // TODO(ingar): Error handling
         return false;
@@ -511,23 +507,23 @@ IsaInitAllocationCollection (uint64_t Capacity)
 }
 
 void
-IsaPrintAllAllocations (void)
+IsaPrintAllAllocations(void)
 {
-    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection ();
-    if (Collection->AllocationCount > 0)
+    Isa__global_allocation_collection *Collection = ISA__GetGlobalAllocationCollection();
+    if(Collection->AllocationCount > 0)
     {
-        printf ("DEBUG: Printing remaining allocations:\n");
-        for (uint64_t i = 0; i <= Collection->End; ++i)
+        printf("DEBUG: Printing remaining allocations:\n");
+        for(uint64_t i = 0; i <= Collection->End; ++i)
         {
-            if (Collection->Occupied[i])
+            if(Collection->Occupied[i])
             {
-                printf ("\n\tIn %s on line %d in %s\n", Collection->Function[i],
-                        Collection->Line[i], Collection->File[i]);
+                printf("\n\tIn %s on line %d in %s\n", Collection->Function[i], Collection->Line[i],
+                       Collection->File[i]);
             }
         }
     }
 
-    printf ("\nDBEUG: There are %lu remaining allocations\n\n", Collection->AllocationCount);
+    printf("\nDBEUG: There are %llu remaining allocations\n\n", Collection->AllocationCount);
 }
 
 ////////////////////////////////////////
@@ -535,7 +531,7 @@ IsaPrintAllAllocations (void)
 ////////////////////////////////////////
 
 uint32_t *
-ISA__GetPCGState (void)
+ISA__GetPCGState(void)
 {
     static uint32_t ISA__PCGState = 0;
     return &ISA__PCGState;
@@ -544,18 +540,18 @@ ISA__GetPCGState (void)
 // Implementation of the PCG algorithm (https://www.pcg-random.org)
 // It's the caller's responsibilites to have called SeedRandPCG before use
 uint32_t
-IsaRandPCG (void)
+IsaRandPCG(void)
 {
-    uint32_t State       = *ISA__GetPCGState ();
-    *ISA__GetPCGState () = State * 747796405u + 2891336453u;
-    uint32_t Word        = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
+    uint32_t State      = *ISA__GetPCGState();
+    *ISA__GetPCGState() = State * 747796405u + 2891336453u;
+    uint32_t Word       = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
     return (Word >> 22u) ^ Word;
 }
 
 void
-IsaSeedRandPCG (uint32_t Seed)
+IsaSeedRandPCG(uint32_t Seed)
 {
-    *ISA__GetPCGState () = Seed;
+    *ISA__GetPCGState() = Seed;
 }
 
 ////////////////////////////////////////
@@ -578,76 +574,75 @@ typedef struct
  * calloc.
  */
 Isa_file_data *
-IsaLoadFileIntoMemory (const char *Filename)
+IsaLoadFileIntoMemory(const char *Filename)
 {
-    FILE *fd = fopen (Filename, "rb");
-    if (!fd)
+    FILE *fd = fopen(Filename, "rb");
+    if(!fd)
     {
-        fprintf (stderr, "Could not open file!\n");
+        fprintf(stderr, "Could not open file!\n");
         return NULL;
     }
 
-    if (fseek (fd, 0L, SEEK_END) != 0)
+    if(fseek(fd, 0L, SEEK_END) != 0)
     {
-        fprintf (stderr, "Could not seek file!\n");
-        fclose (fd);
+        fprintf(stderr, "Could not seek file!\n");
+        fclose(fd);
         return NULL;
     }
 
-    size_t FileSize = (size_t)ftell (fd);
-    rewind (fd);
+    size_t FileSize = (size_t)ftell(fd);
+    rewind(fd);
 
-    size_t         FileDataSize = sizeof (Isa_file_data) + FileSize + 1;
-    Isa_file_data *FileData     = (Isa_file_data *)calloc (1, FileDataSize);
-    if (!FileData)
+    size_t         FileDataSize = sizeof(Isa_file_data) + FileSize + 1;
+    Isa_file_data *FileData     = (Isa_file_data *)calloc(1, FileDataSize);
+    if(!FileData)
     {
-        fprintf (stderr, "Could not allocate memory for file!\n");
-        fclose (fd);
+        fprintf(stderr, "Could not allocate memory for file!\n");
+        fclose(fd);
         return NULL;
     }
 
     FileData->Size   = FileSize;
-    size_t BytesRead = fread (FileData->Data, 1, FileSize, fd);
-    if (BytesRead != FileSize)
+    size_t BytesRead = fread(FileData->Data, 1, FileSize, fd);
+    if(BytesRead != FileSize)
     {
-        fprintf (stderr, "Could not read file!\n");
-        fclose (fd);
-        free (FileData);
+        fprintf(stderr, "Could not read file!\n");
+        fclose(fd);
+        free(FileData);
         return NULL;
     }
 
-    fclose (fd);
+    fclose(fd);
     return FileData;
 }
 
 bool
-IsaWriteBufferToFile (void *Buffer, size_t ElementSize, uint64_t ElementCount, const char *Filename)
+IsaWriteBufferToFile(void *Buffer, size_t ElementSize, uint64_t ElementCount, const char *Filename)
 {
-    FILE *fd = fopen (Filename, "wb");
-    if (!fd)
+    FILE *fd = fopen(Filename, "wb");
+    if(!fd)
     {
-        fprintf (stderr, "Unable to open file %s!\n", Filename);
+        fprintf(stderr, "Unable to open file %s!\n", Filename);
         return false;
     }
 
-    bool WriteSuccessful = fwrite (Buffer, ElementSize, ElementCount, fd) == ElementCount;
-    fclose (fd);
+    bool WriteSuccessful = fwrite(Buffer, ElementSize, ElementCount, fd) == ElementCount;
+    fclose(fd);
     return WriteSuccessful;
 }
 
 bool
-IsaWrite_file_data_ToFile (Isa_file_data *FileData, const char *Filename)
+IsaWrite_file_data_ToFile(Isa_file_data *FileData, const char *Filename)
 {
-    FILE *fd = fopen (Filename, "wb");
-    if (!fd)
+    FILE *fd = fopen(Filename, "wb");
+    if(!fd)
     {
-        fprintf (stderr, "Failed to open file during file_data write!\n");
+        fprintf(stderr, "Failed to open file during file_data write!\n");
         return false;
     }
 
-    bool WriteSuccessful
-        = fwrite (FileData->Data, sizeof (uint8_t), FileData->Size, fd) == FileData->Size;
-    fclose (fd);
+    bool WriteSuccessful = fwrite(FileData->Data, sizeof(uint8_t), FileData->Size, fd) == FileData->Size;
+    fclose(fd);
     return WriteSuccessful;
 }
 
@@ -657,33 +652,33 @@ IsaWrite_file_data_ToFile (Isa_file_data *FileData, const char *Filename)
 
 // TODO(ingar): This is not a general purpose tokenizer,
 // but it is an example of an implementation
-struct Isa_token
+typedef struct isa_token
 {
     char  *Start;
     size_t Len;
-};
+} isa_token;
 
-Isa_token
-IsaGetNextToken (char **Cursor)
+isa_token
+IsaGetNextToken(char **Cursor)
 {
-    while ('\t' != **Cursor)
+    while('\t' != **Cursor)
     {
         (*Cursor)++;
     }
 
     (*Cursor)++; // Skips to start of hex number
 
-    Isa_token Token;
+    isa_token Token;
     Token.Start = *Cursor;
     Token.Len   = 0;
 
-    while ('\n' != **Cursor && '\r' != **Cursor)
+    while('\n' != **Cursor && '\r' != **Cursor)
     {
         (*Cursor)++;
         ++Token.Len;
     }
 
-    if ('\0' != **Cursor)
+    if('\0' != **Cursor)
     {
         **Cursor = '\0';
     }
@@ -702,156 +697,118 @@ IsaGetNextToken (char **Cursor)
 
 #if !defined(NDEBUG)
 
-#define MEM_TRACE 1
-#define MEM_LOG 1
-#define ISA_ASSERT_TRACE 1
-#define ISA_ASSERT_ON_LOG_ERROR 1
+#define OEC_LOG_LEVEL_NONE (0U)
+#define OEC_LOG_LEVEL_ERR (1U)
+#define OEC_LOG_LEVEL_WRN (2U)
+#define OEC_LOG_LEVEL_INF (3U)
+#define OEC_LOG_LEVEL_DBG (4U)
 
-#define ISA_DO_LOG_INFO 1
-#define ISA_DO_LOG_ERROR 1
-#define ISA_DO_LOG_DEBUG 1
+#define OEC_LOG_LEVEL_CHECK(level) (OEC_LOG_LEVEL >= OEC_LOG_LEVEL_##level ? 1 : 0)
 
-#define ISA_ALL_INFO_TRACE 0
-#define ISA_ALL_ERROR_TRACE 0
-#define ISA_ALL_DEBUG_TRACE 0
-
-#define ISA_NO_INFO_TRACE 0
-#define ISA_NO_ERROR_TRACE 0
-#define ISA_NO_DEBUG_TRACE 0
-
-#else // NDEBUG
-
-#define MEM_TRACE 0
-#define MEM_LOG 0
-#define ISA_ASSERT_TRACE 0
-#define ISA_ASSERT_ON_LOG_ERROR 0
-
-#define ISA_DO_LOG_INFO 0
-#define ISA_DO_LOG_ERROR 0
-#define ISA_DO_LOG_DEBUG 0
-
-#define ISA_ALL_INFO_TRACE 0
-#define ISA_ALL_ERROR_TRACE 0
-#define ISA_ALL_DEBUG_TRACE 0
-
-#define ISA_NO_INFO_TRACE 0
-#define ISA_NO_ERROR_TRACE 0
-#define ISA_NO_DEBUG_TRACE 0
-
-#endif // NDEBUG
-
-bool
-ISA__AssertTrace (bool Expression, const char *ExpressionString, int Line, const char *Function,
-                  const char *File)
+struct oec_log_module_
 {
-    printf ("ASSERTION: In %s on line %d in %s:\n\n"
-            "\t-> Assertion on expression \"%s\"\n",
-            Function, Line, File, ExpressionString);
-    assert (Expression);
-    return true;
+    char               buf[OEC_LOG_BUF_SIZE];
+    size_t             buf_size;
+    struct oec_stream *stream;
+    const char        *name;
+};
+
+/**
+ * Redirects to printf
+ */
+ssize_t oec_log_default_stream_write__(struct oec_stream *, void *, size_t);
+
+#define OEC_LOG_REGISTER(module_name)                                                                                  \
+    static struct oec_stream oec_log_default_stream__ = {                                                              \
+        .data  = NULL,                                                                                                 \
+        .read  = NULL,                                                                                                 \
+        .write = oec_log_default_stream_write__,                                                                       \
+    };                                                                                                                 \
+                                                                                                                       \
+    struct oec_log_module_ OEC_CONCAT3(oec_log_instance_, module_name, __) __attribute__((used))                       \
+    = { .buf = { 0 }, .buf_size = OEC_LOG_BUF_SIZE, .stream = &oec_log_default_stream__, .name = #module_name };       \
+                                                                                                                       \
+    static struct oec_log_module_ *oec_log_instance__ = &OEC_CONCAT3(oec_log_instance_, module_name, __)
+
+#define OEC_LOG_DECLARE(name)                                                                                          \
+    extern struct oec_log_module_  OEC_CONCAT3(oec_log_instance_, name, __);                                           \
+    static struct oec_log_module_ *oec_log_instance__ = &OEC_CONCAT3(oec_log_instance_, name, __)
+
+#define OEC_LOG_SET_STREAM(new_stream)                                                                                 \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        oec_log_instance__->stream = new_stream;                                                                       \
+    } while(0)
+
+int oec_write_log_(struct oec_log_module_ *, const char *, ...);
+#define OEC_LOG__(log_level, ...)                                                                                      \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if(OEC_LOG_LEVEL_CHECK(log_level))                                                                             \
+        {                                                                                                              \
+            int ret = oec_write_log_(oec_log_instance__, #log_level, __VA_ARGS__);                                     \
+            assert(0 == ret);                                                                                          \
+        }                                                                                                              \
+    } while(0)
+
+#define OEC_LOG_DBG(...) OEC_LOG__(DBG, __VA_ARGS__)
+
+#define OEC_LOG_INF(...) OEC_LOG__(INF, __VA_ARGS__)
+
+#define OEC_LOG_WRN(...) OEC_LOG__(WRN, __VA_ARGS__)
+
+#define OEC_LOG_ERR(...) OEC_LOG__(ERR, __VA_ARGS__)
+
+OEC_END_DECL__
+
+int
+oec_write_log_(struct oec_log_module_ *module, const char *log_level, ...)
+{
+    time_t    posix_time;
+    struct tm time_info;
+
+    (void)time(&posix_time);
+    (void)localtime_r(&posix_time, &time_info);
+
+    size_t buf_remaining = module->buf_size;
+    size_t chars_written = strftime(module->buf, module->buf_size, "%T: ", &time_info);
+
+    if(0 == chars_written)
+    {
+        return -1;
+    }
+
+    buf_remaining -= chars_written;
+
+    int ret = snprintf(module->buf + chars_written, buf_remaining, "%s: %s: ", module->name, log_level);
+    if((ret < 0) || ((size_t)ret >= buf_remaining))
+    {
+        return -1;
+    }
+
+    chars_written += ret;
+    buf_remaining -= ret;
+
+    va_list args;
+    va_start(args, log_level);
+
+    const char *fmt;
+    fmt = va_arg(args, const char *);
+
+    chars_written += vsnprintf(module->buf + chars_written, buf_remaining, fmt, args);
+
+    va_end(args);
+
+    if(chars_written > module->buf_size)
+    {
+        return -1;
+    }
+
+    oec_errno err = oec_stream_write(module->stream, module->buf, chars_written);
+
+    return err < 0 ? -1 : 0;
 }
-
-#if ISA_ASSERT_ON_LOG_ERROR
-#define ISA_ErrAssert(Expression) assert (Expression)
-#else
-#define ISA_ErrAssert(Expression) ((void)0)
-#endif
-
-#if ISA_DO_LOG_INFO
-#if ISA_ALL_INFO_TRACE
-#define ISA_LOG_INFO(...) ISA_LOG_INFO_TRACE (__VA_ARGS__)
-#else
-#define ISA_LOG_INFO(...)                                                                          \
-    do                                                                                             \
-    {                                                                                              \
-        printf ("INFO: ");                                                                         \
-        printf (__VA_ARGS__);                                                                      \
-        printf ("\n");                                                                             \
-    } while (0)
-#endif // ISA_ALL_INFO_TRACE
-
-#if ISA_NO_INFO_TRACE
-#define ISA_LOG_INFO_TRACE(...) ISA_LOG_INFO (__VA_ARGS__)
-#else
-#define ISA_LOG_INFO_TRACE(...)                                                                    \
-    do                                                                                             \
-    {                                                                                              \
-        printf ("INFO: In %s on line %d in %s:\n\n\t-> ", __func__, __LINE__, __FILE__);           \
-        printf (__VA_ARGS__);                                                                      \
-        printf ("\n");                                                                             \
-    } while (0)
-#endif // ISA_NO_INFO_TRACE
-#else
-#define ISA_LOG_INFO(...) ((void)0)
-#define ISA_LOG_INFO_TRACE(...) ((void)0)
-#endif // ISA_DO_LOG_INFO
-
-#if ISA_DO_LOG_ERROR
-#if ISA_ALL_ERROR_TRACE
-#define ISA_LOG_ERROR(...) ISA_LOG_ERROR_TRACE (__VA_ARGS__)
-#else
-#define ISA_LOG_ERROR(...)                                                                         \
-    do                                                                                             \
-    {                                                                                              \
-        printf ("ERROR: ");                                                                        \
-        fprintf (stderr, __VA_ARGS__);                                                             \
-        fprintf (stderr, "\n");                                                                    \
-        ISA_ErrAssert (false);                                                                     \
-    } while (0)
-#endif // ISA_ALL_ERROR_TRACE
-
-#if ISA_NO_ERROR_TRACE
-#define ISA_LOG_ERROR_TRACE(...) ISA_LOG_ERROR (__VA_ARGS__)
-#else
-#define ISA_LOG_ERROR_TRACE(...)                                                                   \
-    do                                                                                             \
-    {                                                                                              \
-        fprintf (stderr, "ERROR: In %s on line %d in %s:\n\n\t-> ", __func__, __LINE__, __FILE__); \
-        fprintf (stderr, __VA_ARGS__);                                                             \
-        fprintf (stderr, "\n");                                                                    \
-        ISA_ErrAssert (false);                                                                     \
-    } while (0)
-#endif // ISA_NO_ERROR_TRACE
-#else
-#define ISA_LOG_ERROR_TRACE(...) ((void)0)
-#define ISA_LOG_ERROR(...) ((void)0)
-#endif // ISA_DO_LOG_ERROR
-
-#if ISA_DO_LOG_DEBUG
-#if ISA_ALL_DEBUG_TRACE
-#define ISA_LOG_DEBUG(...) ISA_LOG_DEBUG_TRACE (__VA_ARGS__)
-#else
-#define ISA_LOG_DEBUG(...)                                                                         \
-    do                                                                                             \
-    {                                                                                              \
-        printf ("DEBUG: ");                                                                        \
-        printf (__VA_ARGS__);                                                                      \
-        printf ("\n");                                                                             \
-    } while (0)
-#endif
-
-#if ISA_NO_DEBUG_TRACE
-#define ISA_LOG_DEBUG_TRACE(...) ISA_LOG_DEBUG (__VA_ARGS__)
-#else
-#define ISA_LOG_DEBUG_TRACE(...)                                                                   \
-    do                                                                                             \
-    {                                                                                              \
-        printf ("DEBUG: In %s on line %d in %s:\n\n\t-> ", __func__, __LINE__, __FILE__);          \
-        printf (__VA_ARGS__);                                                                      \
-        printf ("\n");                                                                             \
-    } while (0);
-#endif // ISA_NO_DEBUG_TRACE
-#else
-#define ISA_LOG_DEBUG_TRACE(...) ((void)0)
-#define ISA_LOG_DEBUG(...) ((void)0)
-#endif // ISA_DO_LOG_DEBUG
-
-#if ISA_ASSERT_TRACE
-#define IsaAssert(Expression)                                                                      \
-    ISA__AssertTrace (Expression, #Expression, __LINE__, __func__, __FILE__)
-#else
-#define IsaAssert(Expression) assert (Expression)
-#endif
+#endif // NDEBUG
 
 ////////////////////////////////////////
 //               MACROS               //
@@ -860,18 +817,22 @@ ISA__AssertTrace (bool Expression, const char *ExpressionString, int Line, const
 // NOTE(ingar): There might be trouble with the preprocessor replacing
 //               malloc, calloc, etc. inside this file.
 #if MEM_TRACE
-#define malloc(Size) ISA__MallocTrace (Size, __func__, __LINE__, __FILE__)
-#define calloc(Count, Size) ISA__CallocTrace (Count, Size, __func__, __LINE__, __FILE__)
-#define realloc(Pointer, Size) ISA__ReallocTrace (Pointer, Size, __func__, __LINE__, __FILE__)
-#define free(Pointer) ISA__FreeTrace (Pointer, __func__, __LINE__, __FILE__)
+#define malloc(Size) ISA__MallocTrace(Size, __func__, __LINE__, __FILE__)
+#define calloc(Count, Size) ISA__CallocTrace(Count, Size, __func__, __LINE__, __FILE__)
+#define realloc(Pointer, Size) ISA__ReallocTrace(Pointer, Size, __func__, __LINE__, __FILE__)
+#define free(Pointer) ISA__FreeTrace(Pointer, __func__, __LINE__, __FILE__)
 
 #else // MEM_TRACE
 
-#define malloc(Size) malloc (Size)
-#define calloc(Count, Size) calloc (Count, Size)
-#define realloc(Pointer, Size) realloc (Pointer, Size)
-#define free(Pointer) free (Pointer)
+#define malloc(Size) malloc(Size)
+#define calloc(Count, Size) calloc(Count, Size)
+#define realloc(Pointer, Size) realloc(Pointer, Size)
+#define free(Pointer) free(Pointer)
 #endif // MEM_TRACE
 
-#define ISA_H
+#if 0 // defined(_cplusplus)
+}
+#endif
+
+#define ISA_H_
 #endif
