@@ -4,7 +4,7 @@
 ORIGINAL_DIR=$(pwd)
 
 # Get the directory of the current script
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Set the compilers to Clang
 export CC=clang
@@ -22,3 +22,4 @@ echo
 cd "$ORIGINAL_DIR"
 
 echo "Linux debug build completed"
+
