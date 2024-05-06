@@ -7,7 +7,7 @@ cd /D %SCRIPT_DIR%
 IF NOT EXIST build mkdir build
 
 set BuildFolder=build
-set FileOutputs=/Fe%BuildFolder%\ /Fo%BuildFolder%\ /Fd%BuildFolder%\
+set FileOutputs=/Fe%BuildFolder%\main.exe  /Fo%BuildFolder%\ /Fd%BuildFolder%\
 set Libs=user32.lib kernel32.lib gdi32.lib
 
 set Includes=/I"."
