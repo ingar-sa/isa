@@ -131,3 +131,5 @@ Thumbs.db
 # =========================
 build/
 
+# clangd
+.cache
