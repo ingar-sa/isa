@@ -1,8 +1,9 @@
-#ifndef ISA__H__
+#ifndef ISA_H_
+#define ISA_H_
 
 #if defined(_WIN32) || defined(_WIN64)
 
-// NOTE(ingar): isa.h must be included before any other std lib header for this to take effect
+// NOTE(ingar): isa.h must be included before any std lib header for this to take effect
 #if !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -10,10 +11,6 @@
 #include <windows.h>
 
 #endif // Windows
-
-/*
-    TODO(ingar): Add error handling for initialization stuff
-*/
 
 #include <assert.h>
 #include <float.h>
@@ -35,8 +32,6 @@
 #define ISA_END_EXTERN_C
 #endif // Extern C macro
 
-ISA_BEGIN_EXTERN_C
-
 ////////////////////////////////////////
 //               TYPES                //
 ////////////////////////////////////////
@@ -55,6 +50,23 @@ typedef int64_t i64;
 //                MISC                //
 ////////////////////////////////////////
 
+#define ISA_EXPAND(x) x
+
+#define ISA__NUM_ARGS__(X100, X99, X98, X97, X96, X95, X94, X93, X92, X91, X90, X89, X88, X87, X86, X85, X84, X83,     \
+                        X82, X81, X80, X79, X78, X77, X76, X75, X74, X73, X72, X71, X70, X69, X68, X67, X66, X65, X64, \
+                        X63, X62, X61, X60, X59, X58, X57, X56, X55, X54, X53, X52, X51, X50, X49, X48, X47, X46, X45, \
+                        X44, X43, X42, X41, X40, X39, X38, X37, X36, X35, X34, X33, X32, X31, X30, X29, X28, X27, X26, \
+                        X25, X24, X23, X22, X21, X20, X19, X18, X17, X16, X15, X14, X13, X12, X11, X10, X9, X8, X7,    \
+                        X6, X5, X4, X3, X2, X1, X0, ...)                                                               \
+    X0
+
+#define ISA_NUM_ARGS(...)                                                                                              \
+    ISA_EXPAND(ISA__NUM_ARGS__(__VA_ARGS__, 100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83,   \
+                               82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61, \
+                               60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, \
+                               38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, \
+                               16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
+
 #define IsaKiloByte(Number) (Number * 1000ULL)
 #define IsaMegaByte(Number) (IsaKiloByte(Number) * 1000ULL)
 #define IsaGigaByte(Number) (IsaMegaByte(Number) * 1000ULL)
@@ -68,17 +80,17 @@ typedef int64_t i64;
 #define IsaArrayLen(Array) (sizeof(Array) / sizeof(Array[0]))
 
 #define ISA__CONCAT2__(x, y) x##y
-#define ISA_CONCAT2(x, y) ISA__CONCAT2__(x, y)
+#define ISA_CONCAT2(x, y)    ISA__CONCAT2__(x, y)
 
 #define ISA__CONCAT3__(x, y, z) x##y##z
-#define ISA_CONCAT3(x, y, z) ISA__CONCAT3__(x, y, z)
+#define ISA_CONCAT3(x, y, z)    ISA__CONCAT3__(x, y, z)
 
 #define IsaMax(a, b) ((a > b) ? a : b)
 #define IsaMin(a, b) ((a < b) ? a : b)
 
 #define isa_internal static
-#define isa_persist static
-#define isa_global static
+#define isa_persist  static
+#define isa_global   static
 
 bool
 IsaDoubleEpsilonCompare(const double A, const double B)
@@ -122,16 +134,16 @@ typedef struct isa_arena
 {
     u8    *Mem;
     size_t Cur;
-    size_t Size;
+    size_t Cap;
 } isa_arena;
 
 isa_arena
 IsaArenaCreate(void *Mem, size_t Size)
 {
     isa_arena Arena;
-    Arena.Mem  = (u8 *)Mem;
-    Arena.Cur  = 0;
-    Arena.Size = Size;
+    Arena.Mem = (u8 *)Mem;
+    Arena.Cur = 0;
+    Arena.Cap = Size;
 
     return Arena;
 }
@@ -182,7 +194,7 @@ IsaArenaGetPos(isa_arena *Arena)
 void
 IsaArenaSeek(isa_arena *Arena, size_t Pos)
 {
-    assert(0 <= Pos && Pos <= Arena->Size);
+    assert(0 <= Pos && Pos <= Arena->Cap);
     Arena->Cur = Pos;
 }
 
@@ -192,11 +204,11 @@ IsaArenaClear(isa_arena *Arena)
     Arena->Cur = 0;
 }
 
-#define IsaPushArray(arena, type, count) (type *)IsaArenaPush((arena), sizeof(type) * (count))
-#define IsaPushArrayZero(arena, type, count) (type *)IsaArenaPushZero((arena), sizeof(type) * (count))
+#define IsaPushArray(arena, type, count)     (type *)IsaArenaPush(arena, sizeof(type) * (count))
+#define IsaPushArrayZero(arena, type, count) (type *)IsaArenaPushZero(arena, sizeof(type) * (count))
 
-#define IsaPushStruct(arena, type) PushArray((arena), (type), 1)
-#define IsaPushStructZero(arena, type) IsaPushArrayZero((arena), (type), 1)
+#define IsaPushStruct(arena, type)     IsaPushArray(arena, type, 1)
+#define IsaPushStructZero(arena, type) IsaPushArrayZero(arena, type, 1)
 
 #define ISA_DEFINE_POOL_ALLOCATOR(type)                                                                                \
     typedef struct type##_Pool                                                                                         \
@@ -259,7 +271,7 @@ typedef struct
 } Isa__global_allocation_collection__;
 
 Isa__global_allocation_collection__ *
-ISA__GetGlobalAllocationCollection__()
+Isa__GetGlobalAllocationCollection__()
 {
     isa_persist Isa__global_allocation_collection__ Collection = { 0 };
     return &Collection;
@@ -270,9 +282,9 @@ ISA__GetGlobalAllocationCollection__()
 //  but the memory will not be zeroed the first time around, so we might want to
 //  do something about that
 bool
-ISA__AllocGlobalPointerCollection__(uint64_t NewCapacity)
+Isa__AllocGlobalPointerCollection__(uint64_t NewCapacity)
 {
-    Isa__global_allocation_collection__ *Collection = ISA__GetGlobalAllocationCollection__();
+    Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
     uint64_t                             NewEnd     = NewCapacity - 1;
     if(Collection->End >= NewEnd)
     {
@@ -304,9 +316,9 @@ ISA__AllocGlobalPointerCollection__(uint64_t NewCapacity)
 }
 
 Isa__allocation_collection_entry__
-ISA__GetGlobalAllocationCollectionEntry__(void *Pointer)
+Isa__GetGlobalAllocationCollectionEntry__(void *Pointer)
 {
-    Isa__global_allocation_collection__ *Collection = ISA__GetGlobalAllocationCollection__();
+    Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
 
     uint64_t Idx = 0;
     for(; Idx <= Collection->End; ++Idx)
@@ -336,9 +348,9 @@ ISA__GetGlobalAllocationCollectionEntry__(void *Pointer)
 }
 
 void
-ISA__RegisterNewAllocation__(void *Pointer, const char *Function, int Line, const char *File)
+Isa__RegisterNewAllocation__(void *Pointer, const char *Function, int Line, const char *File)
 {
-    Isa__global_allocation_collection__ *Collection = ISA__GetGlobalAllocationCollection__();
+    Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
 
     // TODO(ingar): This loop should never fail if we don't run out of memory
     //  but I should still add some error handling at some point
@@ -352,7 +364,7 @@ ISA__RegisterNewAllocation__(void *Pointer, const char *Function, int Line, cons
             {
                 // TODO(ingar): Handle wrapping
             }
-            ISA__AllocGlobalPointerCollection__(NewCapacity);
+            Isa__AllocGlobalPointerCollection__(NewCapacity);
         }
 
         if(!Collection->Occupied[i])
@@ -389,9 +401,9 @@ ISA__RegisterNewAllocation__(void *Pointer, const char *Function, int Line, cons
  * @note Assumes that Pointer is not null
  */
 void
-ISA__RemoveAllocationFromGlobalCollection__(void *Pointer)
+Isa__RemoveAllocationFromGlobalCollection__(void *Pointer)
 {
-    Isa__allocation_collection_entry__ Entry = ISA__GetGlobalAllocationCollectionEntry__(Pointer);
+    Isa__allocation_collection_entry__ Entry = Isa__GetGlobalAllocationCollectionEntry__(Pointer);
     if(!Entry.Pointer)
     {
         // TODO(ingar): Error handling
@@ -402,13 +414,13 @@ ISA__RemoveAllocationFromGlobalCollection__(void *Pointer)
     free(*Entry.Function);
     free(*Entry.File);
 
-    ISA__GetGlobalAllocationCollection__()->AllocationCount--;
+    Isa__GetGlobalAllocationCollection__()->AllocationCount--;
 }
 
 void
-ISA__UpdateRegisteredAllocation__(void *Original, void *New)
+Isa__UpdateRegisteredAllocation__(void *Original, void *New)
 {
-    Isa__global_allocation_collection__ *Collection = ISA__GetGlobalAllocationCollection__();
+    Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
 
     uint64_t Idx = 0;
     for(; Idx <= Collection->End; ++Idx)
@@ -429,20 +441,20 @@ ISA__UpdateRegisteredAllocation__(void *Original, void *New)
 }
 
 void *
-ISA__MallocTrace__(size_t Size, const char *Function, int Line, const char *File)
+Isa__MallocTrace__(size_t Size, const char *Function, int Line, const char *File)
 {
     void *Pointer = malloc(Size);
 
     printf("MALLOC: In %s on line %d in %s:\n\n", Function, Line, File);
 #if MEM_LOG
-    ISA__RegisterNewAllocation(Pointer, Function, Line, File);
+    Isa__RegisterNewAllocation(Pointer, Function, Line, File);
 #endif
 
     return Pointer;
 }
 
 void *
-ISA__CallocTrace__(size_t ElementCount, size_t ElementSize, const char *Function, int Line, const char *File)
+Isa__CallocTrace__(size_t ElementCount, size_t ElementSize, const char *Function, int Line, const char *File)
 {
     void *Pointer = calloc(ElementCount, ElementSize);
 
@@ -452,14 +464,14 @@ ISA__CallocTrace__(size_t ElementCount, size_t ElementSize, const char *Function
     {
         return NULL;
     }
-    ISA__RegisterNewAllocation(Pointer, Function, Line, File);
+    Isa__RegisterNewAllocation(Pointer, Function, Line, File);
 #endif
 
     return Pointer;
 }
 
 void *
-ISA__ReallocTrace__(void *Pointer, size_t Size, const char *Function, int Line, const char *File)
+Isa__ReallocTrace__(void *Pointer, size_t Size, const char *Function, int Line, const char *File)
 {
     if(!Pointer)
     {
@@ -468,13 +480,13 @@ ISA__ReallocTrace__(void *Pointer, size_t Size, const char *Function, int Line, 
 
     printf("REALLOC: In %s on line %d in %s\n", Function, Line, File);
 #if MEM_LOG
-    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry(Pointer);
+    Isa__allocation_collection_entry Entry = Isa__GetGlobalAllocationCollectionEntry(Pointer);
     if(!Entry.Pointer)
     {
         // TODO(ingar): Error handling
     }
     printf("         Previously allocated in %s on line %d in %s\n\n", *Entry.Function, *Entry.Line, *Entry.File);
-    ISA__RemoveAllocationFromGlobalCollection(Pointer);
+    Isa__RemoveAllocationFromGlobalCollection(Pointer);
 #endif
 
     void *PointerRealloc = realloc(Pointer, Size);
@@ -482,13 +494,13 @@ ISA__ReallocTrace__(void *Pointer, size_t Size, const char *Function, int Line, 
     {
         return NULL;
     }
-    ISA__RegisterNewAllocation__(PointerRealloc, Function, Line, File);
+    Isa__RegisterNewAllocation__(PointerRealloc, Function, Line, File);
 
     return PointerRealloc;
 }
 
 bool
-ISA__FreeTrace__(void *Pointer, const char *Function, int Line, const char *File)
+Isa__FreeTrace__(void *Pointer, const char *Function, int Line, const char *File)
 {
     if(!Pointer)
     {
@@ -497,23 +509,26 @@ ISA__FreeTrace__(void *Pointer, const char *Function, int Line, const char *File
 
     printf("FREE: In %s on line %d in %s:\n", Function, Line, File);
 #if MEM_LOG
-    Isa__allocation_collection_entry Entry = ISA__GetGlobalAllocationCollectionEntry(Pointer);
+    Isa__allocation_collection_entry Entry = Isa__GetGlobalAllocationCollectionEntry(Pointer);
     if(!Entry.Pointer)
     {
         // TODO(ingar): Error handling
     }
     printf("      Allocated in %s on line %d in %s\n\n", *Entry.Function, *Entry.Line, *Entry.File);
-    ISA__RemoveAllocationFromGlobalCollection(Pointer);
+    Isa__RemoveAllocationFromGlobalCollection(Pointer);
 #endif
 
     free(Pointer);
     return true;
 }
 
+// TODO(ingar): Pretty sure this code is busted. Considering I'm mostly going to be using arenas from now on, fixing
+// this isn't a priority
+#if 0
 bool
 IsaInitAllocationCollection(uint64_t Capacity)
 {
-    Isa__global_allocation_collection__ *Collection = ISA__GetGlobalAllocationCollection__();
+    Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
 
     void *OccupiedRealloc = calloc(Capacity, sizeof(bool));
     void *PointerRealloc  = calloc(Capacity, sizeof(void *));
@@ -542,7 +557,7 @@ IsaInitAllocationCollection(uint64_t Capacity)
 void
 IsaPrintAllAllocations(void)
 {
-    Isa__global_allocation_collection__ *Collection = ISA__GetGlobalAllocationCollection__();
+    Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
     if(Collection->AllocationCount > 0)
     {
         printf("DEBUG: Printing remaining allocations:\n");
@@ -558,16 +573,17 @@ IsaPrintAllAllocations(void)
 
     printf("\nDBEUG: There are %llu remaining allocations\n\n", Collection->AllocationCount);
 }
+#endif
 
 ////////////////////////////////////////
 //               RANDOM               //
 ////////////////////////////////////////
 
 uint32_t *
-ISA__GetPCGState__(void)
+Isa__GetPCGState__(void)
 {
-    isa_persist uint32_t ISA__PCGState = 0;
-    return &ISA__PCGState;
+    isa_persist uint32_t Isa__PCGState = 0;
+    return &Isa__PCGState;
 }
 
 // Implementation of the PCG algorithm (https://www.pcg-random.org)
@@ -575,8 +591,8 @@ ISA__GetPCGState__(void)
 uint32_t
 IsaRandPCG(void)
 {
-    uint32_t State        = *ISA__GetPCGState__();
-    *ISA__GetPCGState__() = State * 747796405u + 2891336453u;
+    uint32_t State        = *Isa__GetPCGState__();
+    *Isa__GetPCGState__() = State * 747796405u + 2891336453u;
     uint32_t Word         = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
     return (Word >> 22u) ^ Word;
 }
@@ -584,7 +600,7 @@ IsaRandPCG(void)
 void
 IsaSeedRandPCG(uint32_t Seed)
 {
-    *ISA__GetPCGState__() = Seed;
+    *Isa__GetPCGState__() = Seed;
 }
 
 ////////////////////////////////////////
@@ -738,6 +754,8 @@ struct isa__log_module__
 
 #if defined(_WIN32) || defined(_WIN64)
 
+#define Isa__LogPrint__(string) OutputDebugStringA(string)
+
 size_t
 Isa__FormatTimeWin32__(char *__restrict Buffer, size_t BufferRemaining)
 {
@@ -747,11 +765,13 @@ Isa__FormatTimeWin32__(char *__restrict Buffer, size_t BufferRemaining)
     int CharsWritten = snprintf(Buffer, BufferRemaining, "%04d-%02d-%02d %02d:%02d:%02d: ", Time.wYear, Time.wMonth,
                                 Time.wDay, Time.wHour, Time.wMinute, Time.wSecond);
 
-    return (0 == CharsWritten) ? -1 : CharsWritten;
+    return (CharsWritten < 0) ? -1 : CharsWritten;
 }
 #define FormatTime Isa__FormatTimeWin32__
 
 #elif defined(__linux__)
+
+#define Isa__LogPrint__(string) printf("%s", string)
 
 void
 Isa__FormatTimePosix__(char *__restrict Buffer, size_t BufferRemaining)
@@ -766,7 +786,7 @@ Isa__FormatTimePosix__(char *__restrict Buffer, size_t BufferRemaining)
 
     return (0 == CharsWritten) ? -1 : CharsWritten;
 }
-#define FormatTime Isa__FormatTimePosix__
+#define FormatTime              Isa__FormatTimePosix__
 #elif defined(__APPLE__) && defined(__MACH__)
 #endif // Platform
 
@@ -775,15 +795,15 @@ Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
 {
     size_t BufferRemaining = Module->BufferSize;
     size_t CharsWritten    = FormatTime(Module->Buffer, BufferRemaining);
-    if((CharsWritten < 0) || ((size_t)CharsWritten >= BufferRemaining))
+    if((CharsWritten < 0) || (CharsWritten >= BufferRemaining))
     {
         return -1;
     }
 
     BufferRemaining -= CharsWritten;
 
-    int Ret = snprintf(Module->Buffer + CharsWritten, BufferRemaining, "%s: %s: ", Module->Name, LogLevel);
-    if((Ret < 0) || ((size_t)Ret >= BufferRemaining))
+    size_t Ret = snprintf(Module->Buffer + CharsWritten, BufferRemaining, "%s: %s: ", Module->Name, LogLevel);
+    if((Ret < 0) || (Ret >= BufferRemaining))
     {
         return -1;
     }
@@ -794,19 +814,37 @@ Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
     va_list VaArgs;
     va_start(VaArgs, LogLevel);
 
-    const char *FormatString;
-    FormatString = va_arg(VaArgs, const char *);
+    const char *FormatString = va_arg(VaArgs, const char *);
 
-    CharsWritten += vsnprintf(Module->Buffer + CharsWritten, BufferRemaining, FormatString, VaArgs);
-
+    Ret = vsnprintf(Module->Buffer + CharsWritten, BufferRemaining, FormatString, VaArgs);
     va_end(VaArgs);
 
-    if(CharsWritten > Module->BufferSize)
+    if(Ret < 0)
     {
         return -1;
     }
 
-    printf("%s", Module->Buffer);
+    // TODO(ingar): Figure this shit out!
+    if(Ret >= BufferRemaining)
+    {
+        Module->Buffer[Module->BufferSize - 2] = '\n';
+    }
+    else
+    {
+        CharsWritten += Ret;
+        if(CharsWritten < (Module->BufferSize - 1))
+        {
+            Module->Buffer[CharsWritten]     = '\n';
+            Module->Buffer[CharsWritten + 1] = '\0';
+        }
+        else
+        {
+            Module->Buffer[Module->BufferSize - 2] = '\n';
+            Module->Buffer[Module->BufferSize - 1] = '\0';
+        }
+    }
+
+    Isa__LogPrint__(Module->Buffer);
     return 0;
 }
 
@@ -815,12 +853,12 @@ Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
 #endif
 
 #define ISA_LOG_LEVEL_NONE (0U)
-#define ISA_LOG_LEVEL_ERR (1U)
-#define ISA_LOG_LEVEL_WRN (2U)
-#define ISA_LOG_LEVEL_INF (3U)
-#define ISA_LOG_LEVEL_DBG (4U)
+#define ISA_LOG_LEVEL_ERR  (1U)
+#define ISA_LOG_LEVEL_WRN  (2U)
+#define ISA_LOG_LEVEL_INF  (3U)
+#define ISA_LOG_LEVEL_DBG  (4U)
 
-#define ISA__LOG_LEVEL_CHECK_(level) (ISA_LOG_LEVEL >= ISA_LOG_LEVEL_##level ? 1 : 0)
+#define ISA__LOG_LEVEL_CHECK__(level) (ISA_LOG_LEVEL >= ISA_LOG_LEVEL_##level ? 1 : 0)
 
 #define ISA_LOG_REGISTER(module_name)                                                                                  \
     struct isa__log_module__ ISA_CONCAT3(Isa__LogModule, module_name, __)                                              \
@@ -831,21 +869,35 @@ Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
     extern struct isa__log_module__      ISA_CONCAT3(Isa__LogModule, name, __);                                        \
     isa_global struct isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, name, __)
 
-#define IsaLogDebug(...) ISA__LOG__(DBG, __VA_ARGS__)
-
-#define IsaLogInfo(...) ISA__LOG__(INF, __VA_ARGS__)
-
+#define IsaLogDebug(...)   ISA__LOG__(DBG, __VA_ARGS__)
+#define IsaLogInfo(...)    ISA__LOG__(INF, __VA_ARGS__)
 #define IsaLogWarning(...) ISA__LOG__(WRN, __VA_ARGS__)
+#define IsaLogError(...)   ISA__LOG__(ERR, __VA_ARGS__)
 
-#define IsaLogError(...) ISA__LOG__(ERR, __VA_ARGS__)
+#define ISA__LOG_IF_ARGS_0__(...)
+#define ISA__LOG_IF_ARGS_1__(...) IsaLogError(__VA_ARGS__)
+
+#define ISA__LOG_IF_ARGS__(N, ...) ISA_CONCAT3(ISA__LOG_IF_ARGS_, N, __)(__VA_ARGS__)
+#define ISA__LOG_IF_ANY__(...)     ISA_EXPAND(ISA__LOG_IF_ARGS__(ISA_NUM_ARGS(__VA_ARGS__), __VA_ARGS__))
+
+#define IsaAssert(condition, ...)                                                                                      \
+    if(!(condition))                                                                                                   \
+    {                                                                                                                  \
+        ISA__LOG_IF_ANY__(__VA_ARGS__);                                                                                \
+        assert(0);                                                                                                     \
+    }
 
 #define ISA__LOG__(log_level, ...)                                                                                     \
     do                                                                                                                 \
     {                                                                                                                  \
-        if(ISA__LOG_LEVEL_CHECK_(log_level))                                                                           \
+        if(ISA__LOG_LEVEL_CHECK__(log_level))                                                                          \
         {                                                                                                              \
             int Ret = Isa__WriteLog__(Isa__LogInstance__, #log_level, __VA_ARGS__);                                    \
-            assert(0 == Ret);                                                                                          \
+            if(Ret)                                                                                                    \
+            {                                                                                                          \
+                Isa__LogPrint__("\n\nERROR WHILE LOGGING\n\n");                                                        \
+                assert(0);                                                                                             \
+            }                                                                                                          \
         }                                                                                                              \
     } while(0)
 
@@ -855,23 +907,18 @@ Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
 //               MACROS               //
 ////////////////////////////////////////
 
-// NOTE(ingar): There might be trouble with the preprocessor replacing
-//               malloc, calloc, etc. inside this file.
 #if MEM_TRACE
-#define malloc(Size) ISA__MallocTrace(Size, __func__, __LINE__, __FILE__)
-#define calloc(Count, Size) ISA__CallocTrace(Count, Size, __func__, __LINE__, __FILE__)
-#define realloc(Pointer, Size) ISA__ReallocTrace(Pointer, Size, __func__, __LINE__, __FILE__)
-#define free(Pointer) ISA__FreeTrace(Pointer, __func__, __LINE__, __FILE__)
+#define malloc(Size)           Isa__MallocTrace(Size, __func__, __LINE__, __FILE__)
+#define calloc(Count, Size)    Isa__CallocTrace(Count, Size, __func__, __LINE__, __FILE__)
+#define realloc(Pointer, Size) Isa__ReallocTrace(Pointer, Size, __func__, __LINE__, __FILE__)
+#define free(Pointer)          Isa__FreeTrace(Pointer, __func__, __LINE__, __FILE__)
 
 #else // MEM_TRACE
 
-#define malloc(Size) malloc(Size)
-#define calloc(Count, Size) calloc(Count, Size)
+#define malloc(Size)           malloc(Size)
+#define calloc(Count, Size)    calloc(Count, Size)
 #define realloc(Pointer, Size) realloc(Pointer, Size)
-#define free(Pointer) free(Pointer)
+#define free(Pointer)          free(Pointer)
 #endif // MEM_TRACE
 
-ISA_END_EXTERN_C
-
-#define ISA__H__
-#endif
+#endif // ISA_H_
