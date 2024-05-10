@@ -116,7 +116,7 @@ IsaRadiansFromDegrees(double Degrees)
 }
 
 ////////////////////////////////////////
-//            ALLOCATORS              //
+//               MEMORY               //
 ////////////////////////////////////////
 
 void
@@ -128,22 +128,41 @@ IsaMemZero(void *Mem, size_t Size)
     }
 }
 
-#define IsaMemZeroStruct(struct) IsaMemZero(struct, sizeof(*struct))
+void /* From https://github.com/BLAKE2/BLAKE2/blob/master/ref/blake2-impl.h */
+IsaMemZeroSecure(void *Mem, size_t Size)
+{
+    static void *(*const volatile memset_v)(void *, int, size_t) = &memset;
+    (void)memset_v(Mem, 0, Size);
+}
+
+#define IsaMemZeroStruct(struct)       IsaMemZero(struct, sizeof(*struct))
+#define IsaMemZeroStructSecure(struct) IsaMemZeroSecure(struct, sizeof(*struct))
 
 typedef struct isa_arena
 {
-    u8    *Mem;
     size_t Cur;
     size_t Cap;
+    size_t Save; /* Makes it easier to use the arena as a stack */
+    u8    *Mem;  /* If it's last, the arena's memory can be contiguous with the struct itself */
 } isa_arena;
+
+void
+IsaArenaCreate(isa_arena *Arena, void *Mem, size_t Size)
+{
+    Arena->Cur  = 0;
+    Arena->Cap  = Size;
+    Arena->Save = 0;
+    Arena->Mem  = (u8 *)Mem;
+}
 
 isa_arena
 IsaArenaCreate(void *Mem, size_t Size)
 {
     isa_arena Arena;
-    Arena.Mem = (u8 *)Mem;
-    Arena.Cur = 0;
-    Arena.Cap = Size;
+    Arena.Cur  = 0;
+    Arena.Cap  = Size;
+    Arena.Save = 0;
+    Arena.Mem  = (u8 *)Mem;
 
     return Arena;
 }
@@ -158,6 +177,23 @@ IsaArenaDestroy(isa_arena **Arena)
     }
 }
 
+size_t
+IsaArenaSavePos(isa_arena *Arena)
+{
+    Arena->Save = Arena->Cur;
+    return Arena->Save;
+}
+
+size_t
+IsaArenaReloadPos(isa_arena *Arena)
+{
+    Arena->Cur  = Arena->Save;
+    Arena->Save = 0;
+
+    return Arena->Cur;
+}
+
+// TODO(ingar): Create aligning pushes
 void *
 IsaArenaPush(isa_arena *Arena, size_t Size)
 {
@@ -171,8 +207,8 @@ void *
 IsaArenaPushZero(isa_arena *Arena, size_t Size)
 {
     u8 *AllocedMem = Arena->Mem + Arena->Cur;
-    IsaMemZero(AllocedMem, Size);
     Arena->Cur += Size;
+    IsaMemZero(AllocedMem, Size);
 
     return (void *)AllocedMem;
 }
@@ -187,8 +223,8 @@ IsaArenaPop(isa_arena *Arena, size_t Size)
 size_t
 IsaArenaGetPos(isa_arena *Arena)
 {
-    size_t Result = Arena->Cur;
-    return Result;
+    size_t Pos = Arena->Cur;
+    return Pos;
 }
 
 void
@@ -204,22 +240,29 @@ IsaArenaClear(isa_arena *Arena)
     Arena->Cur = 0;
 }
 
+void
+IsaArenaClearZero(isa_arena *Arena)
+{
+    IsaMemZero(Arena->Mem, Arena->Cap);
+    Arena->Cur = 0;
+}
+
 #define IsaPushArray(arena, type, count)     (type *)IsaArenaPush(arena, sizeof(type) * (count))
 #define IsaPushArrayZero(arena, type, count) (type *)IsaArenaPushZero(arena, sizeof(type) * (count))
 
 #define IsaPushStruct(arena, type)     IsaPushArray(arena, type, 1)
 #define IsaPushStructZero(arena, type) IsaPushArrayZero(arena, type, 1)
 
-#define ISA_DEFINE_POOL_ALLOCATOR(type)                                                                                \
-    typedef struct type##_Pool                                                                                         \
+#define ISA_DEFINE_POOL_ALLOCATOR(type_name, func_name)                                                                \
+    typedef struct type_name##_Pool                                                                                    \
     {                                                                                                                  \
         isa_arena *Arena;                                                                                              \
-        type      *FirstFree;                                                                                          \
-    } type##_pool;                                                                                                     \
+        type_name *FirstFree;                                                                                          \
+    } type_name##_pool;                                                                                                \
                                                                                                                        \
-    type *type##Alloc(type##_pool *Pool)                                                                               \
+    type_name *func_name##Alloc(type_name##_pool *Pool)                                                                \
     {                                                                                                                  \
-        type *Result = Pool->FirstFree;                                                                                \
+        type_name *Result = Pool->FirstFree;                                                                           \
         if(Result)                                                                                                     \
         {                                                                                                              \
             Pool->FirstFree = Pool->FirstFree->Next;                                                                   \
@@ -227,22 +270,17 @@ IsaArenaClear(isa_arena *Arena)
         }                                                                                                              \
         else                                                                                                           \
         {                                                                                                              \
-            Result = IsaPushStructZero(Pool->Arena, type);                                                             \
+            Result = IsaPushStructZero(Pool->Arena, type_name);                                                        \
         }                                                                                                              \
                                                                                                                        \
         return Result;                                                                                                 \
     }                                                                                                                  \
                                                                                                                        \
-    void type##Release(type##_pool *Pool, type *Instance)                                                              \
+    void func_name##Release(type_name##_pool *Pool, type_name *Instance)                                               \
     {                                                                                                                  \
         Instance->Next  = Pool->FirstFree;                                                                             \
         Pool->FirstFree = Instance;                                                                                    \
     }
-
-#define ISA_CREATE_POOL_ALLOCATOR(Name, type, Arena)                                                                   \
-    type##_Pool Name;                                                                                                  \
-    Name.Arena     = Arena;                                                                                            \
-    Name.FirstFree = 0;
 
 ////////////////////////////////////////
 //            MEM TRACE               //
@@ -575,6 +613,20 @@ IsaPrintAllAllocations(void)
 }
 #endif
 
+#if MEM_TRACE
+#define malloc(Size)           Isa__MallocTrace(Size, __func__, __LINE__, __FILE__)
+#define calloc(Count, Size)    Isa__CallocTrace(Count, Size, __func__, __LINE__, __FILE__)
+#define realloc(Pointer, Size) Isa__ReallocTrace(Pointer, Size, __func__, __LINE__, __FILE__)
+#define free(Pointer)          Isa__FreeTrace(Pointer, __func__, __LINE__, __FILE__)
+
+#else // MEM_TRACE
+
+#define malloc(Size)           malloc(Size)
+#define calloc(Count, Size)    calloc(Count, Size)
+#define realloc(Pointer, Size) realloc(Pointer, Size)
+#define free(Pointer)          free(Pointer)
+#endif // MEM_TRACE
+
 ////////////////////////////////////////
 //               RANDOM               //
 ////////////////////////////////////////
@@ -738,6 +790,7 @@ IsaGetNextToken(char **Cursor)
 ////////////////////////////////////////
 //              LOGGING               //
 ////////////////////////////////////////
+/* Based on the logging frontend I wrote for oec */
 
 #if !defined(NDEBUG)
 
@@ -902,23 +955,5 @@ Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
     } while(0)
 
 #endif // NDEBUG
-
-////////////////////////////////////////
-//               MACROS               //
-////////////////////////////////////////
-
-#if MEM_TRACE
-#define malloc(Size)           Isa__MallocTrace(Size, __func__, __LINE__, __FILE__)
-#define calloc(Count, Size)    Isa__CallocTrace(Count, Size, __func__, __LINE__, __FILE__)
-#define realloc(Pointer, Size) Isa__ReallocTrace(Pointer, Size, __func__, __LINE__, __FILE__)
-#define free(Pointer)          Isa__FreeTrace(Pointer, __func__, __LINE__, __FILE__)
-
-#else // MEM_TRACE
-
-#define malloc(Size)           malloc(Size)
-#define calloc(Count, Size)    calloc(Count, Size)
-#define realloc(Pointer, Size) realloc(Pointer, Size)
-#define free(Pointer)          free(Pointer)
-#endif // MEM_TRACE
 
 #endif // ISA_H_
