@@ -807,6 +807,7 @@ struct isa__log_module__
 
 #if defined(_WIN32) || defined(_WIN64)
 
+// TODO(ingar): Add some way to choose printf instead
 #define Isa__LogPrint__(string) OutputDebugStringA(string)
 
 size_t
