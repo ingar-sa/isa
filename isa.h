@@ -138,6 +138,7 @@ IsaMemZeroSecure(void *Mem, size_t Size)
 #define IsaMemZeroStruct(struct)       IsaMemZero(struct, sizeof(*struct))
 #define IsaMemZeroStructSecure(struct) IsaMemZeroSecure(struct, sizeof(*struct))
 
+// TODO(ingar): Change all size_t instances with fixed size to ensure, well... fixed size?
 typedef struct isa_arena
 {
     size_t Cur;
@@ -145,6 +146,13 @@ typedef struct isa_arena
     size_t Save; /* Makes it easier to use the arena as a stack */
     u8    *Mem;  /* If it's last, the arena's memory can be contiguous with the struct itself */
 } isa_arena;
+
+struct isa_slice
+{
+    u64 Len; /* Not size_t since I want the member size to be constant */
+    u64 ESize;
+    u8 *Mem;
+};
 
 void
 IsaArenaCreate(isa_arena *Arena, void *Mem, size_t Size)
@@ -197,20 +205,30 @@ IsaArenaReloadPos(isa_arena *Arena)
 void *
 IsaArenaPush(isa_arena *Arena, size_t Size)
 {
-    u8 *AllocedMem = Arena->Mem + Arena->Cur;
-    Arena->Cur += Size;
+    if((Arena->Cur + Size) < Arena->Cap)
+    {
+        u8 *AllocedMem = Arena->Mem + Arena->Cur;
+        Arena->Cur += Size;
 
-    return (void *)AllocedMem;
+        return (void *)AllocedMem;
+    }
+
+    return nullptr;
 }
 
 void *
 IsaArenaPushZero(isa_arena *Arena, size_t Size)
 {
-    u8 *AllocedMem = Arena->Mem + Arena->Cur;
-    Arena->Cur += Size;
-    IsaMemZero(AllocedMem, Size);
+    if((Arena->Cur + Size) < Arena->Cap)
+    {
+        u8 *AllocedMem = Arena->Mem + Arena->Cur;
+        Arena->Cur += Size;
+        IsaMemZero(AllocedMem, Size);
 
-    return (void *)AllocedMem;
+        return (void *)AllocedMem;
+    }
+
+    return nullptr;
 }
 
 void
@@ -247,11 +265,37 @@ IsaArenaClearZero(isa_arena *Arena)
     Arena->Cur = 0;
 }
 
+void
+IsaArrayShift(void *Mem, u64 From, u64 To, u64 Count, size_t ElementSize)
+{
+    if(From != To)
+    {
+        u8 *Array = (u8 *)Mem;
+        u8 *Src   = Array + (From * ElementSize);
+        u8 *Dst   = Array + (To * ElementSize);
+
+        u64 NumElements = (Count > From) ? (Count - From) : 0;
+
+        if(NumElements > 0)
+        {
+            size_t NBytes = NumElements * ElementSize;
+            memmove(Dst, Src, NBytes);
+        }
+    }
+}
+
+#define IsaArrayDeleteAndShift(mem, i, count, esize) IsaArrayShift(mem, (i + 1), i, count, esize)
+
 #define IsaPushArray(arena, type, count)     (type *)IsaArenaPush(arena, sizeof(type) * (count))
 #define IsaPushArrayZero(arena, type, count) (type *)IsaArenaPushZero(arena, sizeof(type) * (count))
 
 #define IsaPushStruct(arena, type)     IsaPushArray(arena, type, 1)
 #define IsaPushStructZero(arena, type) IsaPushArrayZero(arena, type, 1)
+
+#define IsaNewSlice(arena, len, esize)                                                                                 \
+    {                                                                                                                  \
+        len, esize, (u8 *)IsaArenaPushZero(arena, len *esize)                                                          \
+    }
 
 #define ISA_DEFINE_POOL_ALLOCATOR(type_name, func_name)                                                                \
     typedef struct type_name##_Pool                                                                                    \
@@ -280,6 +324,30 @@ IsaArenaClearZero(isa_arena *Arena)
     {                                                                                                                  \
         Instance->Next  = Pool->FirstFree;                                                                             \
         Pool->FirstFree = Instance;                                                                                    \
+    }
+
+struct isa_string
+{
+    u64         Len;    /* Does include the null terminator*/
+    const char *String; /* Will always be null-terminated for simplicity */
+};
+
+u64
+IsaStrlen(const char *String)
+{
+    /* To include the null terminator */
+    u64 Count = 1;
+    while(*String++ != '\0')
+    {
+        ++Count;
+    }
+
+    return Count;
+}
+
+#define IsaNewString(string)                                                                                           \
+    {                                                                                                                  \
+        IsaStrlen(#string), #string                                                                                    \
     }
 
 ////////////////////////////////////////
@@ -919,9 +987,11 @@ Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
         = { .Buffer = { 0 }, .BufferSize = ISA_LOG_BUF_SIZE, .Name = #module_name };                                   \
     isa_global struct isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, module_name, __)
 
-#define ISA_LOG_DECLARE(name)                                                                                          \
+#define ISA_LOG_DECLARE_EXTERN(name)                                                                                   \
     extern struct isa__log_module__      ISA_CONCAT3(Isa__LogModule, name, __);                                        \
     isa_global struct isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, name, __)
+
+#define ISA_LOG_DECLARE_SAME_TU extern struct isa__log_module__ *Isa__LogInstance__
 
 #define IsaLogDebug(...)   ISA__LOG__(DBG, __VA_ARGS__)
 #define IsaLogInfo(...)    ISA__LOG__(INF, __VA_ARGS__)
