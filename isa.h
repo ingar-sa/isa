@@ -186,14 +186,14 @@ IsaArenaDestroy(isa_arena **Arena)
 }
 
 size_t
-IsaArenaSavePos(isa_arena *Arena)
+IsaArenaF5(isa_arena *Arena)
 {
     Arena->Save = Arena->Cur;
     return Arena->Save;
 }
 
 size_t
-IsaArenaReloadPos(isa_arena *Arena)
+IsaArenaF9(isa_arena *Arena)
 {
     Arena->Cur  = Arena->Save;
     Arena->Save = 0;
@@ -347,7 +347,7 @@ IsaStrlen(const char *String)
 
 #define IsaNewString(string)                                                                                           \
     {                                                                                                                  \
-        IsaStrlen(#string), #string                                                                                    \
+        IsaStrlen(string), string                                                                                      \
     }
 
 ////////////////////////////////////////
