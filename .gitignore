@@ -129,7 +129,8 @@ Thumbs.db
 # =========================
 # Build Folders
 # =========================
-build/
+**/build/
+**/Build/
 
 # clangd
 .cache

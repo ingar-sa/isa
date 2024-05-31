@@ -16,25 +16,28 @@
 #include <float.h>
 #include <math.h>
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h> //NOTE(ingar): Replace with our own functions?
 
-#if defined(__cplusplus)
+#if !defined(__cplusplus)
+#include <stdbool.h>
+#endif // C/C++
+
+////////////////////////////////////////
+//              DEFINES               //
+////////////////////////////////////////
+
 #define ISA_BEGIN_EXTERN_C                                                                                             \
     extern "C"                                                                                                         \
     {
-#define ISA_END_EXTERN_C }
-#else
-#define ISA_BEGIN_EXTERN_C
-#define ISA_END_EXTERN_C
-#endif // Extern C macro
 
-////////////////////////////////////////
-//               TYPES                //
-////////////////////////////////////////
+#define ISA_END_EXTERN_C }
+
+#if defined(__cplusplus)
+ISA_BEGIN_EXTERN_C
+#endif
 
 typedef uint8_t  u8;
 typedef uint16_t u16;
@@ -46,12 +49,16 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-////////////////////////////////////////
-//                MISC                //
-////////////////////////////////////////
+static_assert(sizeof(float) == 4, "Float is not 4 bytes!");
+static_assert(sizeof(double) == 8, "Double is not 8 bytes!");
 
-#define ISA_EXPAND(x) x
+typedef float  f32;
+typedef double f64;
 
+#define ISA_EXPAND(x)    x
+#define ISA_STRINGIFY(x) #x
+
+#if 0
 #define ISA__NUM_ARGS__(X100, X99, X98, X97, X96, X95, X94, X93, X92, X91, X90, X89, X88, X87, X86, X85, X84, X83,     \
                         X82, X81, X80, X79, X78, X77, X76, X75, X74, X73, X72, X71, X70, X69, X68, X67, X66, X65, X64, \
                         X63, X62, X61, X60, X59, X58, X57, X56, X55, X54, X53, X52, X51, X50, X49, X48, X47, X46, X45, \
@@ -66,6 +73,11 @@ typedef int64_t i64;
                                60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, \
                                38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, \
                                16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
+#endif
+
+#define ISA__NUM_ARGS_HELPER(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
+#define ISA__NUM_ARGS_IMPL(args)                                                  ISA__NUM_ARGS_HELPER args
+#define ISA_NUM_ARGS(...)                                                         ISA__NUM_ARGS_IMPL((__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
 
 #define IsaKiloByte(Number) (Number * 1000ULL)
 #define IsaMegaByte(Number) (IsaKiloByte(Number) * 1000ULL)
@@ -92,6 +104,247 @@ typedef int64_t i64;
 #define isa_persist  static
 #define isa_global   static
 
+////////////////////////////////////////
+//              LOGGING               //
+////////////////////////////////////////
+/* Based on the logging frontend I wrote for oec */
+
+#if !defined(NDEBUG)
+
+#if !defined(ISA_LOG_BUF_SIZE)
+#define ISA_LOG_BUF_SIZE 128
+#endif
+
+typedef struct isa__log_module__
+{
+    const char *Name;
+    u64         BufferSize;
+    char       *Buffer;
+} isa__log_module__;
+
+#if defined(_WIN32) || defined(_WIN64)
+
+// #define ISA_LOG_OUTPUTDEBUGSTRING
+
+#if defined(ISA_LOG_OUTPUTDEBUGSTRING)
+// TODO(ingar): OutputDebugString does not support formatting, so I need to find some way to do that
+#define Isa__LogPrint__(string) OutputDebugStringA(string)
+#else
+#define Isa__LogPrint__(string) printf("%s", string)
+#endif
+
+u64
+Isa__FormatTimeWin32__(char *__restrict Buffer, u64 BufferRemaining)
+{
+    SYSTEMTIME Time;
+    GetLocalTime(&Time);
+
+    int CharsWritten = snprintf(Buffer, BufferRemaining, "%04d-%02d-%02d %02d:%02d:%02d: ", Time.wYear, Time.wMonth,
+                                Time.wDay, Time.wHour, Time.wMinute, Time.wSecond);
+
+    return (CharsWritten < 0) ? -1 : CharsWritten;
+}
+#define FormatTime Isa__FormatTimeWin32__
+
+#elif defined(__linux__)
+
+#define Isa__LogPrint__(string) printf("%s", string)
+
+void
+Isa__FormatTimePosix__(char *__restrict Buffer, u64 BufferRemaining)
+{
+    time_t    PosixTime;
+    struct tm TimeInfo;
+
+    time(&PosixTime);
+    localtime_r(&PosixTime, &TimeInfo);
+
+    u64 CharsWritten = strftime(Buffer, BufferRemaining, "%T: ", &TimeInfo);
+
+    return (0 == CharsWritten) ? -1 : CharsWritten;
+}
+#define FormatTime              Isa__FormatTimePosix__
+#elif defined(__APPLE__) && defined(__MACH__)
+#endif // Platform
+
+i64
+Isa__WriteLog__(isa__log_module__ *Module, const char *LogLevel, ...)
+{
+    u64 BufferRemaining = Module->BufferSize;
+    u64 CharsWritten    = FormatTime(Module->Buffer, BufferRemaining);
+    if((CharsWritten < 0) || (CharsWritten >= BufferRemaining))
+    {
+        return -1;
+    }
+
+    BufferRemaining -= CharsWritten;
+
+    u64 Ret = snprintf(Module->Buffer + CharsWritten, BufferRemaining, "%s: %s: ", Module->Name, LogLevel);
+    if((Ret < 0) || (Ret >= BufferRemaining))
+    {
+        return -1;
+    }
+
+    CharsWritten += Ret;
+    BufferRemaining -= Ret;
+
+    va_list VaArgs;
+    va_start(VaArgs, LogLevel);
+
+    const char *FormatString = va_arg(VaArgs, const char *);
+
+    Ret = vsnprintf(Module->Buffer + CharsWritten, BufferRemaining, FormatString, VaArgs);
+    va_end(VaArgs);
+
+    if(Ret < 0)
+    {
+        return -1;
+    }
+
+    // TODO(ingar): Figure this shit out!
+    if(Ret >= BufferRemaining)
+    {
+        Module->Buffer[Module->BufferSize - 2] = '\n';
+    }
+    else
+    {
+        CharsWritten += Ret;
+        if(CharsWritten < (Module->BufferSize - 1))
+        {
+            Module->Buffer[CharsWritten]     = '\n';
+            Module->Buffer[CharsWritten + 1] = '\0';
+        }
+        else
+        {
+            Module->Buffer[Module->BufferSize - 2] = '\n';
+            Module->Buffer[Module->BufferSize - 1] = '\0';
+        }
+    }
+
+    Isa__LogPrint__(Module->Buffer);
+    return 0;
+}
+
+i64
+Isa__LogNoModule__(const char *LogLevel, const char *FunctionName, ...)
+{
+    char             *Buffer = (char *)calloc(ISA_LOG_BUF_SIZE, sizeof(char));
+    isa__log_module__ Module = {
+        .Name       = FunctionName,
+        .BufferSize = ISA_LOG_BUF_SIZE,
+        .Buffer     = Buffer,
+    };
+
+    va_list VaArgs;
+    va_start(VaArgs, LogLevel);
+
+    i64 Ret = Isa__WriteLog__(&Module, LogLevel, VaArgs);
+
+    va_end(VaArgs);
+    free(Buffer);
+
+    return Ret;
+}
+
+#if !defined(ISA_LOG_LEVEL)
+#define ISA_LOG_LEVEL 4
+#endif
+
+#define ISA_LOG_LEVEL_NONE (0U)
+#define ISA_LOG_LEVEL_ERR  (1U)
+#define ISA_LOG_LEVEL_WRN  (2U)
+#define ISA_LOG_LEVEL_INF  (3U)
+#define ISA_LOG_LEVEL_DBG  (4U)
+
+#define ISA__LOG_LEVEL_CHECK__(level) (ISA_LOG_LEVEL >= ISA_LOG_LEVEL_##level ? 1 : 0)
+
+#if !defined(ISA_LOG_OVERRIDE)
+#define ISA_LOG_REGISTER(module_name)                                                                                  \
+    isa_global char              Isa__LogBuffer__[ISA_LOG_BUF_SIZE];                                                   \
+    isa_global isa__log_module__ ISA_CONCAT3(Isa__LogModule, module_name, __)                                          \
+        = { .Name = #module_name, .BufferSize = ISA_LOG_BUF_SIZE, .Buffer = Isa__LogBuffer__ };                        \
+    isa_global isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, module_name, __)
+
+#define ISA_LOG_DECLARE_EXTERN(name)                                                                                   \
+    extern isa__log_module__      ISA_CONCAT3(Isa__LogModule, name, __);                                               \
+    isa_global isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, name, __)
+
+#else /* ISA_LOG_OVERRIDE */
+/* This allows files with different module names to be included in the same TU by overriding their module names */
+
+#define ISA_LOG_REGISTER_OVERRIDE(module_name)                                                                         \
+    isa_global char              Isa__LogBuffer__[ISA_LOG_BUF_SIZE];                                                   \
+    isa_global isa__log_module__ ISA_CONCAT3(Isa__LogModule, module_name, __)                                          \
+        = { .Name = #module_name, .BufferSize = ISA_LOG_BUF_SIZE, .Buffer = Isa__LogBuffer__ };                        \
+    isa_global isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, module_name, __)
+
+#define ISA_LOG_REGISTER(name)       extern isa__log_module__ *Isa__LogInstance__
+#define ISA_LOG_DECLARE_EXTERN(name) extern isa__log_module__ *Isa__LogInstance__
+
+#endif /* ISA_LOG_OVERRIDE */
+
+#define ISA_LOG_DECLARE_SAME_TU extern struct isa__log_module__ *Isa__LogInstance__
+
+#define ISA__LOG__(log_level, ...)                                                                                     \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if(ISA__LOG_LEVEL_CHECK__(log_level))                                                                          \
+        {                                                                                                              \
+            i64 Ret = Isa__WriteLog__(Isa__LogInstance__, #log_level, __VA_ARGS__);                                    \
+            if(Ret)                                                                                                    \
+            {                                                                                                          \
+                Isa__LogPrint__("\n\nERROR WHILE LOGGING\n\n");                                                        \
+                assert(0);                                                                                             \
+            }                                                                                                          \
+        }                                                                                                              \
+    } while(0)
+
+#define ISA__LOG_NO_MODULE__(log_level, ...)                                                                           \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if(ISA__LOG_LEVEL_CHECK__(log_level))                                                                          \
+        {                                                                                                              \
+            i64 Ret = Isa__LogNoModule__(#log_level, __func__, __VA_ARGS__);                                           \
+            if(Ret)                                                                                                    \
+            {                                                                                                          \
+                Isa__LogPrint__("\n\nERROR WHILE LOGGING\n\n");                                                        \
+                assert(0);                                                                                             \
+            }                                                                                                          \
+        }                                                                                                              \
+    } while(0)
+
+#define IsaLogDebug(...)   ISA__LOG__(DBG, __VA_ARGS__)
+#define IsaLogInfo(...)    ISA__LOG__(INF, __VA_ARGS__)
+#define IsaLogWarning(...) ISA__LOG__(WRN, __VA_ARGS__)
+#define IsaLogError(...)   ISA__LOG__(ERR, __VA_ARGS__)
+
+#define IsaLogDebugNoModule(...)   ISA__LOG_NO_MODULE__(DBG, __VA_ARGS__)
+#define IsaLogInfoNoModule(...)    ISA__LOG_NO_MODULE__(INF, __VA_ARGS__)
+#define IsaLogWarningNoModule(...) ISA__LOG_NO_MODULE__(WRN, __VA_ARGS__)
+#define IsaLogErrorNoModule(...)   ISA__LOG_NO_MODULE__(ERR, __VA_ARGS__)
+
+#define ISA__LOG_IF_ARGS_0__(...)
+#define ISA__LOG_IF_ARGS_1__(...) ISA__LOG_NO_MODULE__(ERR, __VA_ARGS__);
+
+#define ISA__LOG_IF_ARGS__(N, ...) ISA_CONCAT3(ISA__LOG_IF_ARGS_, N, __)(__VA_ARGS__)
+#define ISA__LOG_IF_ANY__(...)     ISA_EXPAND(ISA__LOG_IF_ARGS__(ISA_NUM_ARGS(__VA_ARGS__), __VA_ARGS__))
+
+#define IsaAssert(condition, ...)                                                                                      \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if(!(condition))                                                                                               \
+        {                                                                                                              \
+            ISA__LOG_IF_ANY__(__VA_ARGS__)                                                                             \
+            assert(0);                                                                                                 \
+        }                                                                                                              \
+    } while(0)
+
+#endif // NDEBUG
+
+////////////////////////////////////////
+//               MISC                 //
+////////////////////////////////////////
+
 bool
 IsaDoubleEpsilonCompare(const double A, const double B)
 {
@@ -99,11 +352,11 @@ IsaDoubleEpsilonCompare(const double A, const double B)
     return fabs(A - B) <= (GreatestValue * DBL_EPSILON);
 }
 
-uint64_t
+u64
 IsaDoubleSignBit(double F)
 {
-    uint64_t  Mask = 1ULL << 63;
-    uint64_t *Comp = (uint64_t *)&F;
+    u64  Mask = 1ULL << 63;
+    u64 *Comp = (u64 *)&F;
 
     return (*Comp) & Mask;
 }
@@ -120,42 +373,42 @@ IsaRadiansFromDegrees(double Degrees)
 ////////////////////////////////////////
 
 void
-IsaMemZero(void *Mem, size_t Size)
+IsaMemZero(void *Mem, u64 Size)
 {
-    for(size_t i = 0; i < Size; ++i)
+    for(u64 i = 0; i < Size; ++i)
     {
         ((u8 *)Mem)[i] = 0;
     }
 }
 
 void /* From https://github.com/BLAKE2/BLAKE2/blob/master/ref/blake2-impl.h */
-IsaMemZeroSecure(void *Mem, size_t Size)
+IsaMemZeroSecure(void *Mem, u64 Size)
 {
-    static void *(*const volatile memset_v)(void *, int, size_t) = &memset;
+    static void *(*const volatile memset_v)(void *, int, u64) = &memset;
     (void)memset_v(Mem, 0, Size);
 }
 
 #define IsaMemZeroStruct(struct)       IsaMemZero(struct, sizeof(*struct))
 #define IsaMemZeroStructSecure(struct) IsaMemZeroSecure(struct, sizeof(*struct))
 
-// TODO(ingar): Change all size_t instances with fixed size to ensure, well... fixed size?
+// TODO(ingar): Change all u64 instances with fixed size to ensure, well... fixed size?
 typedef struct isa_arena
 {
-    size_t Cur;
-    size_t Cap;
-    size_t Save; /* Makes it easier to use the arena as a stack */
-    u8    *Mem;  /* If it's last, the arena's memory can be contiguous with the struct itself */
+    u64 Cur;
+    u64 Cap;
+    u64 Save; /* Makes it easier to use the arena as a stack */
+    u8 *Mem;  /* If it's last, the arena's memory can be contiguous with the struct itself */
 } isa_arena;
 
-struct isa_slice
+typedef struct isa_slice
 {
-    u64 Len; /* Not size_t since I want the member size to be constant */
+    u64 Len; /* Not u64 since I want the member size to be constant */
     u64 ESize;
     u8 *Mem;
-};
+} isa_slice;
 
 void
-IsaArenaCreate(isa_arena *Arena, void *Mem, size_t Size)
+IsaArenaInit(isa_arena *Arena, void *Mem, u64 Size)
 {
     Arena->Cur  = 0;
     Arena->Cap  = Size;
@@ -163,8 +416,23 @@ IsaArenaCreate(isa_arena *Arena, void *Mem, size_t Size)
     Arena->Mem  = (u8 *)Mem;
 }
 
+isa_arena *
+IsaArenaCreateContiguous(void *Mem, u64 Size)
+{
+    IsaAssert(Size >= (sizeof(isa_arena) + 1), "The provided memory must be large enough to hold the isa_arena struct "
+                                               "and provide it at least 1 byte of memory");
+
+    isa_arena *Arena = (isa_arena *)Mem;
+    Arena->Cap       = Size - sizeof(isa_arena);
+    Arena->Cur       = 0;
+    Arena->Save      = 0;
+    Arena->Mem       = (u8 *)Mem + sizeof(isa_arena);
+
+    return Arena;
+}
+
 isa_arena
-IsaArenaCreate(void *Mem, size_t Size)
+IsaArenaCreate(void *Mem, u64 Size)
 {
     isa_arena Arena;
     Arena.Cur  = 0;
@@ -185,14 +453,14 @@ IsaArenaDestroy(isa_arena **Arena)
     }
 }
 
-size_t
+u64
 IsaArenaF5(isa_arena *Arena)
 {
     Arena->Save = Arena->Cur;
     return Arena->Save;
 }
 
-size_t
+u64
 IsaArenaF9(isa_arena *Arena)
 {
     Arena->Cur  = Arena->Save;
@@ -203,7 +471,7 @@ IsaArenaF9(isa_arena *Arena)
 
 // TODO(ingar): Create aligning pushes
 void *
-IsaArenaPush(isa_arena *Arena, size_t Size)
+IsaArenaPush(isa_arena *Arena, u64 Size)
 {
     if((Arena->Cur + Size) < Arena->Cap)
     {
@@ -213,11 +481,11 @@ IsaArenaPush(isa_arena *Arena, size_t Size)
         return (void *)AllocedMem;
     }
 
-    return nullptr;
+    return NULL;
 }
 
 void *
-IsaArenaPushZero(isa_arena *Arena, size_t Size)
+IsaArenaPushZero(isa_arena *Arena, u64 Size)
 {
     if((Arena->Cur + Size) < Arena->Cap)
     {
@@ -228,25 +496,25 @@ IsaArenaPushZero(isa_arena *Arena, size_t Size)
         return (void *)AllocedMem;
     }
 
-    return nullptr;
+    return NULL;
 }
 
 void
-IsaArenaPop(isa_arena *Arena, size_t Size)
+IsaArenaPop(isa_arena *Arena, u64 Size)
 {
     assert(Arena->Cur >= Size);
     Arena->Cur -= Size;
 }
 
-size_t
+u64
 IsaArenaGetPos(isa_arena *Arena)
 {
-    size_t Pos = Arena->Cur;
+    u64 Pos = Arena->Cur;
     return Pos;
 }
 
 void
-IsaArenaSeek(isa_arena *Arena, size_t Pos)
+IsaArenaSeek(isa_arena *Arena, u64 Pos)
 {
     assert(0 <= Pos && Pos <= Arena->Cap);
     Arena->Cur = Pos;
@@ -266,7 +534,7 @@ IsaArenaClearZero(isa_arena *Arena)
 }
 
 void
-IsaArrayShift(void *Mem, u64 From, u64 To, u64 Count, size_t ElementSize)
+IsaArrayShift(void *Mem, u64 From, u64 To, u64 Count, u64 ElementSize)
 {
     if(From != To)
     {
@@ -278,7 +546,7 @@ IsaArrayShift(void *Mem, u64 From, u64 To, u64 Count, size_t ElementSize)
 
         if(NumElements > 0)
         {
-            size_t NBytes = NumElements * ElementSize;
+            u64 NBytes = NumElements * ElementSize;
             memmove(Dst, Src, NBytes);
         }
     }
@@ -326,17 +594,16 @@ IsaArrayShift(void *Mem, u64 From, u64 To, u64 Count, size_t ElementSize)
         Pool->FirstFree = Instance;                                                                                    \
     }
 
-struct isa_string
+typedef struct isa_string
 {
-    u64         Len;    /* Does include the null terminator*/
-    const char *String; /* Will always be null-terminated for simplicity */
-};
+    u64         Len; /* Does not include the null terminator*/
+    const char *S;   /* Will always be null-terminated for simplicity */
+} isa_string;
 
 u64
 IsaStrlen(const char *String)
 {
-    /* To include the null terminator */
-    u64 Count = 1;
+    u64 Count = 0;
     while(*String++ != '\0')
     {
         ++Count;
@@ -365,9 +632,9 @@ typedef struct
 
 typedef struct
 {
-    uint64_t End; // Final index in the arrays (Capacity - 1)
-    bool     Initialized;
-    uint64_t AllocationCount;
+    u64  End; // Final index in the arrays (Capacity - 1)
+    bool Initialized;
+    u64  AllocationCount;
 
     bool  *Occupied;
     void **Pointer;
@@ -388,10 +655,10 @@ Isa__GetGlobalAllocationCollection__()
 //  but the memory will not be zeroed the first time around, so we might want to
 //  do something about that
 bool
-Isa__AllocGlobalPointerCollection__(uint64_t NewCapacity)
+Isa__AllocGlobalPointerCollection__(u64 NewCapacity)
 {
     Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
-    uint64_t                             NewEnd     = NewCapacity - 1;
+    u64                                  NewEnd     = NewCapacity - 1;
     if(Collection->End >= NewEnd)
     {
         // TODO(ingar): Error handling
@@ -426,7 +693,7 @@ Isa__GetGlobalAllocationCollectionEntry__(void *Pointer)
 {
     Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
 
-    uint64_t Idx = 0;
+    u64 Idx = 0;
     for(; Idx <= Collection->End; ++Idx)
     {
         if(Collection->Pointer[Idx] == Pointer)
@@ -460,12 +727,12 @@ Isa__RegisterNewAllocation__(void *Pointer, const char *Function, int Line, cons
 
     // TODO(ingar): This loop should never fail if we don't run out of memory
     //  but I should still add some error handling at some point
-    uint64_t EntryIdx = 0;
-    for(uint64_t i = 0; i <= Collection->End; ++i)
+    u64 EntryIdx = 0;
+    for(u64 i = 0; i <= Collection->End; ++i)
     {
         if(i > Collection->End)
         {
-            uint64_t NewCapacity = (uint64_t)(1.5 * (double)Collection->End);
+            u64 NewCapacity = (u64)(1.5 * (double)Collection->End);
             if(NewCapacity <= Collection->End)
             {
                 // TODO(ingar): Handle wrapping
@@ -480,8 +747,8 @@ Isa__RegisterNewAllocation__(void *Pointer, const char *Function, int Line, cons
         }
     }
 
-    size_t FunctionNameLength = strlen(Function) + 1;
-    size_t FileNameLength     = strlen(File) + 1;
+    u64 FunctionNameLength = IsaStrlen(Function) + 1;
+    u64 FileNameLength     = IsaStrlen(File) + 1;
 
     char *FunctionNameString = (char *)malloc(FunctionNameLength);
     char *FileNameString     = (char *)malloc(FileNameLength);
@@ -528,7 +795,7 @@ Isa__UpdateRegisteredAllocation__(void *Original, void *New)
 {
     Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
 
-    uint64_t Idx = 0;
+    u64 Idx = 0;
     for(; Idx <= Collection->End; ++Idx)
     {
         if(Collection->Pointer[Idx] == Original)
@@ -547,7 +814,7 @@ Isa__UpdateRegisteredAllocation__(void *Original, void *New)
 }
 
 void *
-Isa__MallocTrace__(size_t Size, const char *Function, int Line, const char *File)
+Isa__MallocTrace__(u64 Size, const char *Function, int Line, const char *File)
 {
     void *Pointer = malloc(Size);
 
@@ -560,7 +827,7 @@ Isa__MallocTrace__(size_t Size, const char *Function, int Line, const char *File
 }
 
 void *
-Isa__CallocTrace__(size_t ElementCount, size_t ElementSize, const char *Function, int Line, const char *File)
+Isa__CallocTrace__(u64 ElementCount, u64 ElementSize, const char *Function, int Line, const char *File)
 {
     void *Pointer = calloc(ElementCount, ElementSize);
 
@@ -577,7 +844,7 @@ Isa__CallocTrace__(size_t ElementCount, size_t ElementSize, const char *Function
 }
 
 void *
-Isa__ReallocTrace__(void *Pointer, size_t Size, const char *Function, int Line, const char *File)
+Isa__ReallocTrace__(void *Pointer, u64 Size, const char *Function, int Line, const char *File)
 {
     if(!Pointer)
     {
@@ -632,7 +899,7 @@ Isa__FreeTrace__(void *Pointer, const char *Function, int Line, const char *File
 // this isn't a priority
 #if 0
 bool
-IsaInitAllocationCollection(uint64_t Capacity)
+IsaInitAllocationCollection(u64 Capacity)
 {
     Isa__global_allocation_collection__ *Collection = Isa__GetGlobalAllocationCollection__();
 
@@ -667,7 +934,7 @@ IsaPrintAllAllocations(void)
     if(Collection->AllocationCount > 0)
     {
         printf("DEBUG: Printing remaining allocations:\n");
-        for(uint64_t i = 0; i <= Collection->End; ++i)
+        for(u64 i = 0; i <= Collection->End; ++i)
         {
             if(Collection->Occupied[i])
             {
@@ -682,10 +949,10 @@ IsaPrintAllAllocations(void)
 #endif
 
 #if MEM_TRACE
-#define malloc(Size)           Isa__MallocTrace(Size, __func__, __LINE__, __FILE__)
-#define calloc(Count, Size)    Isa__CallocTrace(Count, Size, __func__, __LINE__, __FILE__)
-#define realloc(Pointer, Size) Isa__ReallocTrace(Pointer, Size, __func__, __LINE__, __FILE__)
-#define free(Pointer)          Isa__FreeTrace(Pointer, __func__, __LINE__, __FILE__)
+#define malloc(Size)           Isa__MallocTrace__(Size, __func__, __LINE__, __FILE__)
+#define calloc(Count, Size)    Isa__CallocTrace__(Count, Size, __func__, __LINE__, __FILE__)
+#define realloc(Pointer, Size) Isa__ReallocTrace__(Pointer, Size, __func__, __LINE__, __FILE__)
+#define free(Pointer)          Isa__FreeTrace__(Pointer, __func__, __LINE__, __FILE__)
 
 #else // MEM_TRACE
 
@@ -699,7 +966,7 @@ IsaPrintAllAllocations(void)
 //               RANDOM               //
 ////////////////////////////////////////
 
-uint32_t *
+u32 *
 Isa__GetPCGState__(void)
 {
     isa_persist uint32_t Isa__PCGState = 0;
@@ -708,12 +975,12 @@ Isa__GetPCGState__(void)
 
 // Implementation of the PCG algorithm (https://www.pcg-random.org)
 // It's the caller's responsibilites to have called SeedRandPCG before use
-uint32_t
+u32
 IsaRandPCG(void)
 {
-    uint32_t State        = *Isa__GetPCGState__();
+    u32 State             = *Isa__GetPCGState__();
     *Isa__GetPCGState__() = State * 747796405u + 2891336453u;
-    uint32_t Word         = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
+    u32 Word              = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
     return (Word >> 22u) ^ Word;
 }
 
@@ -723,17 +990,13 @@ IsaSeedRandPCG(uint32_t Seed)
     *Isa__GetPCGState__() = Seed;
 }
 
-////////////////////////////////////////
-//               ARRAY                //
-////////////////////////////////////////
-
 /////////////////////////////////////////
 //              FILE IO                //
 /////////////////////////////////////////
 
-typedef struct
+typedef struct isa_file_data
 {
-    size_t  Size;
+    u64     Size;
     uint8_t Data[];
 } isa_file_data;
 
@@ -759,10 +1022,10 @@ IsaLoadFileIntoMemory(const char *Filename)
         return NULL;
     }
 
-    size_t FileSize = (size_t)ftell(fd);
+    u64 FileSize = (u64)ftell(fd);
     rewind(fd);
 
-    size_t         FileDataSize = sizeof(isa_file_data) + FileSize + 1;
+    u64            FileDataSize = sizeof(isa_file_data) + FileSize + 1;
     isa_file_data *FileData     = (isa_file_data *)calloc(1, FileDataSize);
     if(!FileData)
     {
@@ -771,8 +1034,8 @@ IsaLoadFileIntoMemory(const char *Filename)
         return NULL;
     }
 
-    FileData->Size   = FileSize;
-    size_t BytesRead = fread(FileData->Data, 1, FileSize, fd);
+    FileData->Size = FileSize;
+    u64 BytesRead  = fread(FileData->Data, 1, FileSize, fd);
     if(BytesRead != FileSize)
     {
         fprintf(stderr, "Could not read file!\n");
@@ -786,7 +1049,7 @@ IsaLoadFileIntoMemory(const char *Filename)
 }
 
 bool
-IsaWriteBufferToFile(void *Buffer, size_t ElementSize, uint64_t ElementCount, const char *Filename)
+IsaWriteBufferToFile(void *Buffer, u64 ElementSize, u64 ElementCount, const char *Filename)
 {
     FILE *fd = fopen(Filename, "wb");
     if(!fd)
@@ -823,8 +1086,8 @@ IsaWrite_isa_file_data_ToFile(isa_file_data *FileData, const char *Filename)
 // but it is an example of an implementation
 typedef struct isa_token
 {
-    char  *Start;
-    size_t Len;
+    char *Start;
+    u64   Len;
 } isa_token;
 
 isa_token
@@ -855,176 +1118,8 @@ IsaGetNextToken(char **Cursor)
     return Token;
 }
 
-////////////////////////////////////////
-//              LOGGING               //
-////////////////////////////////////////
-/* Based on the logging frontend I wrote for oec */
-
-#if !defined(NDEBUG)
-
-#if !defined(ISA_LOG_BUF_SIZE)
-#define ISA_LOG_BUF_SIZE 128
+#if defined(__cplusplus)
+ISA_END_EXTERN_C
 #endif
-
-struct isa__log_module__
-{
-    char        Buffer[ISA_LOG_BUF_SIZE];
-    size_t      BufferSize;
-    const char *Name;
-};
-
-#if defined(_WIN32) || defined(_WIN64)
-
-// TODO(ingar): Add some way to choose printf instead
-#define Isa__LogPrint__(string) OutputDebugStringA(string)
-
-size_t
-Isa__FormatTimeWin32__(char *__restrict Buffer, size_t BufferRemaining)
-{
-    SYSTEMTIME Time;
-    GetLocalTime(&Time);
-
-    int CharsWritten = snprintf(Buffer, BufferRemaining, "%04d-%02d-%02d %02d:%02d:%02d: ", Time.wYear, Time.wMonth,
-                                Time.wDay, Time.wHour, Time.wMinute, Time.wSecond);
-
-    return (CharsWritten < 0) ? -1 : CharsWritten;
-}
-#define FormatTime Isa__FormatTimeWin32__
-
-#elif defined(__linux__)
-
-#define Isa__LogPrint__(string) printf("%s", string)
-
-void
-Isa__FormatTimePosix__(char *__restrict Buffer, size_t BufferRemaining)
-{
-    time_t    PosixTime;
-    struct tm TimeInfo;
-
-    time(&PosixTime);
-    localtime_r(&PosixTime, &TimeInfo);
-
-    size_t CharsWritten = strftime(Buffer, BufferRemaining, "%T: ", &TimeInfo);
-
-    return (0 == CharsWritten) ? -1 : CharsWritten;
-}
-#define FormatTime              Isa__FormatTimePosix__
-#elif defined(__APPLE__) && defined(__MACH__)
-#endif // Platform
-
-int
-Isa__WriteLog__(struct isa__log_module__ *Module, const char *LogLevel, ...)
-{
-    size_t BufferRemaining = Module->BufferSize;
-    size_t CharsWritten    = FormatTime(Module->Buffer, BufferRemaining);
-    if((CharsWritten < 0) || (CharsWritten >= BufferRemaining))
-    {
-        return -1;
-    }
-
-    BufferRemaining -= CharsWritten;
-
-    size_t Ret = snprintf(Module->Buffer + CharsWritten, BufferRemaining, "%s: %s: ", Module->Name, LogLevel);
-    if((Ret < 0) || (Ret >= BufferRemaining))
-    {
-        return -1;
-    }
-
-    CharsWritten += Ret;
-    BufferRemaining -= Ret;
-
-    va_list VaArgs;
-    va_start(VaArgs, LogLevel);
-
-    const char *FormatString = va_arg(VaArgs, const char *);
-
-    Ret = vsnprintf(Module->Buffer + CharsWritten, BufferRemaining, FormatString, VaArgs);
-    va_end(VaArgs);
-
-    if(Ret < 0)
-    {
-        return -1;
-    }
-
-    // TODO(ingar): Figure this shit out!
-    if(Ret >= BufferRemaining)
-    {
-        Module->Buffer[Module->BufferSize - 2] = '\n';
-    }
-    else
-    {
-        CharsWritten += Ret;
-        if(CharsWritten < (Module->BufferSize - 1))
-        {
-            Module->Buffer[CharsWritten]     = '\n';
-            Module->Buffer[CharsWritten + 1] = '\0';
-        }
-        else
-        {
-            Module->Buffer[Module->BufferSize - 2] = '\n';
-            Module->Buffer[Module->BufferSize - 1] = '\0';
-        }
-    }
-
-    Isa__LogPrint__(Module->Buffer);
-    return 0;
-}
-
-#if !defined(ISA_LOG_LEVEL)
-#define ISA_LOG_LEVEL 4
-#endif
-
-#define ISA_LOG_LEVEL_NONE (0U)
-#define ISA_LOG_LEVEL_ERR  (1U)
-#define ISA_LOG_LEVEL_WRN  (2U)
-#define ISA_LOG_LEVEL_INF  (3U)
-#define ISA_LOG_LEVEL_DBG  (4U)
-
-#define ISA__LOG_LEVEL_CHECK__(level) (ISA_LOG_LEVEL >= ISA_LOG_LEVEL_##level ? 1 : 0)
-
-#define ISA_LOG_REGISTER(module_name)                                                                                  \
-    struct isa__log_module__ ISA_CONCAT3(Isa__LogModule, module_name, __)                                              \
-        = { .Buffer = { 0 }, .BufferSize = ISA_LOG_BUF_SIZE, .Name = #module_name };                                   \
-    isa_global struct isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, module_name, __)
-
-#define ISA_LOG_DECLARE_EXTERN(name)                                                                                   \
-    extern struct isa__log_module__      ISA_CONCAT3(Isa__LogModule, name, __);                                        \
-    isa_global struct isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, name, __)
-
-#define ISA_LOG_DECLARE_SAME_TU extern struct isa__log_module__ *Isa__LogInstance__
-
-#define IsaLogDebug(...)   ISA__LOG__(DBG, __VA_ARGS__)
-#define IsaLogInfo(...)    ISA__LOG__(INF, __VA_ARGS__)
-#define IsaLogWarning(...) ISA__LOG__(WRN, __VA_ARGS__)
-#define IsaLogError(...)   ISA__LOG__(ERR, __VA_ARGS__)
-
-#define ISA__LOG_IF_ARGS_0__(...)
-#define ISA__LOG_IF_ARGS_1__(...) IsaLogError(__VA_ARGS__)
-
-#define ISA__LOG_IF_ARGS__(N, ...) ISA_CONCAT3(ISA__LOG_IF_ARGS_, N, __)(__VA_ARGS__)
-#define ISA__LOG_IF_ANY__(...)     ISA_EXPAND(ISA__LOG_IF_ARGS__(ISA_NUM_ARGS(__VA_ARGS__), __VA_ARGS__))
-
-#define IsaAssert(condition, ...)                                                                                      \
-    if(!(condition))                                                                                                   \
-    {                                                                                                                  \
-        ISA__LOG_IF_ANY__(__VA_ARGS__);                                                                                \
-        assert(0);                                                                                                     \
-    }
-
-#define ISA__LOG__(log_level, ...)                                                                                     \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if(ISA__LOG_LEVEL_CHECK__(log_level))                                                                          \
-        {                                                                                                              \
-            int Ret = Isa__WriteLog__(Isa__LogInstance__, #log_level, __VA_ARGS__);                                    \
-            if(Ret)                                                                                                    \
-            {                                                                                                          \
-                Isa__LogPrint__("\n\nERROR WHILE LOGGING\n\n");                                                        \
-                assert(0);                                                                                             \
-            }                                                                                                          \
-        }                                                                                                              \
-    } while(0)
-
-#endif // NDEBUG
 
 #endif // ISA_H_
