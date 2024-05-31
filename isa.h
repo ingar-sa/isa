@@ -49,35 +49,28 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-static_assert(sizeof(float) == 4, "Float is not 4 bytes!");
-static_assert(sizeof(double) == 8, "Double is not 8 bytes!");
-
 typedef float  f32;
 typedef double f64;
 
-#define ISA_EXPAND(x)    x
-#define ISA_STRINGIFY(x) #x
+#define ISA_EXPAND(x)       x
+#define ISA__STRINGIFY__(x) #x
+#define ISA_STRINGIFY(x)    ISA__STRINGIFY__(x)
 
-#if 0
-#define ISA__NUM_ARGS__(X100, X99, X98, X97, X96, X95, X94, X93, X92, X91, X90, X89, X88, X87, X86, X85, X84, X83,     \
-                        X82, X81, X80, X79, X78, X77, X76, X75, X74, X73, X72, X71, X70, X69, X68, X67, X66, X65, X64, \
-                        X63, X62, X61, X60, X59, X58, X57, X56, X55, X54, X53, X52, X51, X50, X49, X48, X47, X46, X45, \
-                        X44, X43, X42, X41, X40, X39, X38, X37, X36, X35, X34, X33, X32, X31, X30, X29, X28, X27, X26, \
-                        X25, X24, X23, X22, X21, X20, X19, X18, X17, X16, X15, X14, X13, X12, X11, X10, X9, X8, X7,    \
-                        X6, X5, X4, X3, X2, X1, X0, ...)                                                               \
-    X0
+#define ISA__NUM_ARGS__(X99, X98, X97, X96, X95, X94, X93, X92, X91, X90, X89, X88, X87, X86, X85, X84, X83, X82, X81, \
+                        X80, X79, X78, X77, X76, X75, X74, X73, X72, X71, X70, X69, X68, X67, X66, X65, X64, X63, X62, \
+                        X61, X60, X59, X58, X57, X56, X55, X54, X53, X52, X51, X50, X49, X48, X47, X46, X45, X44, X43, \
+                        X42, X41, X40, X39, X38, X37, X36, X35, X34, X33, X32, X31, X30, X29, X28, X27, X26, X25, X24, \
+                        X23, X22, X21, X20, X19, X18, X17, X16, X15, X14, X13, X12, X11, X10, X9, X8, X7, X6, X5, X4,  \
+                        X3, X2, X1, X0, N, ...)                                                                        \
+    N
 
+// NOTE(ingar): ISA_NUM_ARGS() will result in 1... because C's peepee doesn't function quite right
 #define ISA_NUM_ARGS(...)                                                                                              \
     ISA_EXPAND(ISA__NUM_ARGS__(__VA_ARGS__, 100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83,   \
                                82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61, \
                                60, 59, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, \
                                38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, \
                                16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
-#endif
-
-#define ISA__NUM_ARGS_HELPER(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
-#define ISA__NUM_ARGS_IMPL(args)                                                  ISA__NUM_ARGS_HELPER args
-#define ISA_NUM_ARGS(...)                                                         ISA__NUM_ARGS_IMPL((__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
 
 #define IsaKiloByte(Number) (Number * 1000ULL)
 #define IsaMegaByte(Number) (IsaKiloByte(Number) * 1000ULL)
@@ -168,7 +161,7 @@ Isa__FormatTimePosix__(char *__restrict Buffer, u64 BufferRemaining)
 #endif // Platform
 
 i64
-Isa__WriteLog__(isa__log_module__ *Module, const char *LogLevel, ...)
+Isa__WriteLog__(isa__log_module__ *Module, const char *LogLevel, va_list VaArgs)
 {
     u64 BufferRemaining = Module->BufferSize;
     u64 CharsWritten    = FormatTime(Module->Buffer, BufferRemaining);
@@ -179,8 +172,8 @@ Isa__WriteLog__(isa__log_module__ *Module, const char *LogLevel, ...)
 
     BufferRemaining -= CharsWritten;
 
-    u64 Ret = snprintf(Module->Buffer + CharsWritten, BufferRemaining, "%s: %s: ", Module->Name, LogLevel);
-    if((Ret < 0) || (Ret >= BufferRemaining))
+    i64 Ret = snprintf(Module->Buffer + CharsWritten, BufferRemaining, "%s: %s: ", Module->Name, LogLevel);
+    if((Ret < 0) || (Ret >= (i64)BufferRemaining))
     {
         return -1;
     }
@@ -188,21 +181,15 @@ Isa__WriteLog__(isa__log_module__ *Module, const char *LogLevel, ...)
     CharsWritten += Ret;
     BufferRemaining -= Ret;
 
-    va_list VaArgs;
-    va_start(VaArgs, LogLevel);
-
     const char *FormatString = va_arg(VaArgs, const char *);
-
-    Ret = vsnprintf(Module->Buffer + CharsWritten, BufferRemaining, FormatString, VaArgs);
-    va_end(VaArgs);
+    Ret                      = vsnprintf(Module->Buffer + CharsWritten, BufferRemaining, FormatString, VaArgs);
 
     if(Ret < 0)
     {
         return -1;
     }
 
-    // TODO(ingar): Figure this shit out!
-    if(Ret >= BufferRemaining)
+    if(Ret >= (i64)BufferRemaining)
     {
         Module->Buffer[Module->BufferSize - 2] = '\n';
     }
@@ -226,7 +213,17 @@ Isa__WriteLog__(isa__log_module__ *Module, const char *LogLevel, ...)
 }
 
 i64
-Isa__LogNoModule__(const char *LogLevel, const char *FunctionName, ...)
+Isa__WriteLogIntermediate__(isa__log_module__ *Module, const char *LogLevel, ...)
+{
+    va_list VaArgs;
+    va_start(VaArgs, LogLevel);
+    i64 Ret = Isa__WriteLog__(Module, LogLevel, VaArgs);
+    va_end(VaArgs);
+    return Ret;
+}
+
+i64
+Isa__WriteLogNoModule__(const char *LogLevel, const char *FunctionName, ...)
 {
     char             *Buffer = (char *)calloc(ISA_LOG_BUF_SIZE, sizeof(char));
     isa__log_module__ Module = {
@@ -236,7 +233,7 @@ Isa__LogNoModule__(const char *LogLevel, const char *FunctionName, ...)
     };
 
     va_list VaArgs;
-    va_start(VaArgs, LogLevel);
+    va_start(VaArgs, FunctionName);
 
     i64 Ret = Isa__WriteLog__(&Module, LogLevel, VaArgs);
 
@@ -290,7 +287,7 @@ Isa__LogNoModule__(const char *LogLevel, const char *FunctionName, ...)
     {                                                                                                                  \
         if(ISA__LOG_LEVEL_CHECK__(log_level))                                                                          \
         {                                                                                                              \
-            i64 Ret = Isa__WriteLog__(Isa__LogInstance__, #log_level, __VA_ARGS__);                                    \
+            i64 Ret = Isa__WriteLogIntermediate__(Isa__LogInstance__, ISA_STRINGIFY(log_level), __VA_ARGS__);          \
             if(Ret)                                                                                                    \
             {                                                                                                          \
                 Isa__LogPrint__("\n\nERROR WHILE LOGGING\n\n");                                                        \
@@ -304,7 +301,7 @@ Isa__LogNoModule__(const char *LogLevel, const char *FunctionName, ...)
     {                                                                                                                  \
         if(ISA__LOG_LEVEL_CHECK__(log_level))                                                                          \
         {                                                                                                              \
-            i64 Ret = Isa__LogNoModule__(#log_level, __func__, __VA_ARGS__);                                           \
+            i64 Ret = Isa__WriteLogNoModule__(ISA_STRINGIFY(log_level), __func__, __VA_ARGS__);                        \
             if(Ret)                                                                                                    \
             {                                                                                                          \
                 Isa__LogPrint__("\n\nERROR WHILE LOGGING\n\n");                                                        \
@@ -323,19 +320,13 @@ Isa__LogNoModule__(const char *LogLevel, const char *FunctionName, ...)
 #define IsaLogWarningNoModule(...) ISA__LOG_NO_MODULE__(WRN, __VA_ARGS__)
 #define IsaLogErrorNoModule(...)   ISA__LOG_NO_MODULE__(ERR, __VA_ARGS__)
 
-#define ISA__LOG_IF_ARGS_0__(...)
-#define ISA__LOG_IF_ARGS_1__(...) ISA__LOG_NO_MODULE__(ERR, __VA_ARGS__);
-
-#define ISA__LOG_IF_ARGS__(N, ...) ISA_CONCAT3(ISA__LOG_IF_ARGS_, N, __)(__VA_ARGS__)
-#define ISA__LOG_IF_ANY__(...)     ISA_EXPAND(ISA__LOG_IF_ARGS__(ISA_NUM_ARGS(__VA_ARGS__), __VA_ARGS__))
-
-#define IsaAssert(condition, ...)                                                                                      \
+#define IsaAssert(condition)                                                                                           \
     do                                                                                                                 \
     {                                                                                                                  \
         if(!(condition))                                                                                               \
         {                                                                                                              \
-            ISA__LOG_IF_ANY__(__VA_ARGS__)                                                                             \
-            assert(0);                                                                                                 \
+            ISA__LOG_NO_MODULE__(ERR, "Assertion failed: " ISA_STRINGIFY(condition));                                  \
+            assert(condition);                                                                                         \
         }                                                                                                              \
     } while(0)
 
@@ -402,7 +393,7 @@ typedef struct isa_arena
 
 typedef struct isa_slice
 {
-    u64 Len; /* Not u64 since I want the member size to be constant */
+    u64 Len; /* Not size_t since I want the member size to be constant */
     u64 ESize;
     u8 *Mem;
 } isa_slice;
@@ -419,8 +410,7 @@ IsaArenaInit(isa_arena *Arena, void *Mem, u64 Size)
 isa_arena *
 IsaArenaCreateContiguous(void *Mem, u64 Size)
 {
-    IsaAssert(Size >= (sizeof(isa_arena) + 1), "The provided memory must be large enough to hold the isa_arena struct "
-                                               "and provide it at least 1 byte of memory");
+    IsaAssert(Size >= (sizeof(isa_arena) + 1));
 
     isa_arena *Arena = (isa_arena *)Mem;
     Arena->Cap       = Size - sizeof(isa_arena);

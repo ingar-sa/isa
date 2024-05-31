@@ -5,8 +5,9 @@ ISA_LOG_REGISTER(IsaTest);
 int
 main(void)
 {
-    IsaLogInfo("Hello, logging!");
-    IsaAssert(0, "Need to figure out how to use this without any args!");
-    // IsaAssert(0);
+    IsaLogInfo("Hello module!");
+    IsaLogInfoNoModule("Hello no module!");
+    IsaAssert((0 == 1) ? 0 : 0);
+
     return 0;
 }
