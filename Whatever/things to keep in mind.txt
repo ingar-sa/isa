@@ -1,0 +1,20 @@
+Many SW bugs are caused by the programmer making assumptions about the environment and interactions of the program, 
+and it's likely that the program will at some point enter a state where those assumptions no longer hold.
+
+Requests during load testing of a data service must be done independently of the response times of each requests.
+    If new requests wait for previous ones to complete, the load is not accurate to real use, where users send
+    requests independently of one another.
+
+The response time of parallelization is only as fast as the slowest part.
+Generally, an aspect of a system is only as strong as the weakest component of that aspect.
+
+From Designing Data-Intensive Applications The Big Ideas Behind Reliable, Scalable, and Maintainable Systems (Martin Kleppmann, 2017):
+    "... it is [...] likely that you will need to rethink your architecture on every order of magnitude load increase—
+    or perhaps even more often than that."
+    (Also from the book: "magic scaling sauce - generic, one-size-fits-all scalable architecture". I just think this name is fantastic.)
+
+The value of an id is independent of the value it points to, and vice versa. They can therefore be changed independently of one another,
+    and coherency is still preserved in the system.
+
+SSD writes should ideally be a multiple of the clustered page size (how do you find what that is? Profiling! Write to disk and different sizes, and see which give a drop in latency.)
+Random writes at sizes multiples of or larger than the clustered blocks have similar bandwith to sequential writes.

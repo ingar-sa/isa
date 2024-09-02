@@ -1,0 +1,114 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"type": "object",
+	"properties": {
+		"collections": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"name": { "type": "string" },
+					"path": { "type": "string" }
+				},
+				"required": ["name", "path"],
+				"additionalProperties": false
+			}
+		},
+		"thread_pool_count": { "type": "integer" },
+		"enable_checker_only_saved": {
+			"type": "boolean",
+			"description": "Turns on only calling the checker on the package being saved"
+		},
+		"enable_semantic_tokens": {
+			"type": "boolean",
+			"description": "Turns on syntax highlighting."
+		},
+		"enable_document_symbols": {
+			"type": "boolean",
+			"description": "Turns on outline of all your global declarations in your document."
+		},
+		"enable_format": {
+			"type": "boolean",
+			"description": "Turns on formatting with odinfmt.",
+			"default": true
+		},
+		"enable_hover": {
+			"type": "boolean",
+			"description": "Enables hover feature"
+		},
+		"enable_procedure_context": { "type": "boolean" },
+		"enable_snippets": {
+			"type": "boolean",
+			"description": "Turns on builtin snippets"
+		},
+		"enable_inlay_hints": {
+			"type": "boolean",
+			"description": "Turn on inlay hints for editors that support it."
+		},
+		"enable_inlay_hints_params": {
+			"type": "boolean",
+			"description": "Turn on inlay hints for (non-default) parameters.",
+			"default": true
+		},
+		"enable_inlay_hints_default_params": {
+			"type": "boolean",
+			"description": "Turn on inlay hints for default parameters.",
+			"default": true
+		},
+		"enable_procedure_snippet": {
+			"type": "boolean",
+			"description": "Use snippets when completing procedures—adds parenthesis after the name.",
+			"default": true
+		},
+		"enable_references": { "type": "boolean" },
+		"enable_fake_methods": {
+			"type": "boolean",
+			"description": "Turn on fake methods completion."
+		},
+		"disable_parser_errors": { "type": "boolean" },
+		"verbose": {
+			"type": "boolean",
+			"description": "Logs warnings instead of just errors."
+		},
+		"file_log": { "type": "boolean" },
+		"odin_command": {
+			"type": "string",
+			"description": "Allows you to specify your Odin location, instead of just relying on the environment path."
+		},
+		"checker_args": {
+			"type": "string",
+			"description": "Pass custom arguments to `odin check`."
+		},
+		"profile": {
+			"type": "string",
+			"description": "What profile to currently use."
+		},
+		"profiles": {
+			"type": "array",
+			"description": "List of different profiles that describe the environment ols is running under.",
+			"items": {
+				"type": "object",
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "The name of the profile."
+					},
+					"os": {
+						"type": "string",
+						"description": "The operating system for the profile."
+					},
+					"checker_path": {
+						"type": "array",
+						"description": "List of paths where to run the checker.",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"required": ["name", "checker_path"],
+				"additionalProperties": false
+			}
+		}
+	},
+	"required": []
+}
