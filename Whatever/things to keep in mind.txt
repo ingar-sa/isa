@@ -18,3 +18,5 @@ The value of an id is independent of the value it points to, and vice versa. The
 
 SSD writes should ideally be a multiple of the clustered page size (how do you find what that is? Profiling! Write to disk and different sizes, and see which give a drop in latency.)
 Random writes at sizes multiples of or larger than the clustered blocks have similar bandwith to sequential writes.
+
+VSCode debugger could not find breakpoint locations when the working directory for SON was through a symlink. Opening the actual directory worked.
