@@ -3,7 +3,8 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 
-// NOTE(ingar): isa.h must be included before any std lib header for this to take effect
+// NOTE(ingar): isa.h must be included before any std lib header for this to
+// take effect
 #if !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -64,7 +65,8 @@ typedef double f64;
                         X3, X2, X1, X0, N, ...)                                                                        \
     N
 
-// NOTE(ingar): ISA_NUM_ARGS() will result in 1... because C's peepee doesn't function quite right
+// NOTE(ingar): ISA_NUM_ARGS() will result in 1... because C's peepee doesn't
+// function quite right
 #define ISA_NUM_ARGS(...)                                                                                              \
     ISA_EXPAND(ISA__NUM_ARGS__(__VA_ARGS__, 100, 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83,   \
                                82, 81, 80, 79, 78, 77, 76, 75, 74, 73, 72, 71, 70, 69, 68, 67, 66, 65, 64, 63, 62, 61, \
@@ -120,7 +122,8 @@ typedef struct isa__log_module__
 // #define ISA_LOG_OUTPUTDEBUGSTRING
 
 #if defined(ISA_LOG_OUTPUTDEBUGSTRING)
-// TODO(ingar): OutputDebugString does not support formatting, so I need to find some way to do that
+// TODO(ingar): OutputDebugString does not support formatting, so I need to find
+// some way to do that
 #define Isa__LogPrint__(string) OutputDebugStringA(string)
 #else
 #define Isa__LogPrint__(string) printf("%s", string)
@@ -267,7 +270,8 @@ Isa__WriteLogNoModule__(const char *LogLevel, const char *FunctionName, ...)
     isa_global isa__log_module__ *Isa__LogInstance__ = &ISA_CONCAT3(Isa__LogModule, name, __)
 
 #else /* ISA_LOG_OVERRIDE */
-/* This allows files with different module names to be included in the same TU by overriding their module names */
+/* This allows files with different module names to be included in the same TU
+ * by overriding their module names */
 
 #define ISA_LOG_REGISTER_OVERRIDE(module_name)                                                                         \
     isa_global char              Isa__LogBuffer__[ISA_LOG_BUF_SIZE];                                                   \
@@ -382,13 +386,15 @@ IsaMemZeroSecure(void *Mem, u64 Size)
 #define IsaMemZeroStruct(struct)       IsaMemZero(struct, sizeof(*struct))
 #define IsaMemZeroStructSecure(struct) IsaMemZeroSecure(struct, sizeof(*struct))
 
-// TODO(ingar): Change all u64 instances with fixed size to ensure, well... fixed size?
+// TODO(ingar): Change all u64 instances with fixed size to ensure, well...
+// fixed size?
 typedef struct isa_arena
 {
     u64 Cur;
     u64 Cap;
     u64 Save; /* Makes it easier to use the arena as a stack */
-    u8 *Mem;  /* If it's last, the arena's memory can be contiguous with the struct itself */
+    u8 *Mem;  /* If it's last, the arena's memory can be contiguous with the struct
+                 itself */
 } isa_arena;
 
 typedef struct isa_slice
@@ -550,10 +556,7 @@ IsaArrayShift(void *Mem, u64 From, u64 To, u64 Count, u64 ElementSize)
 #define IsaPushStruct(arena, type)     IsaPushArray(arena, type, 1)
 #define IsaPushStructZero(arena, type) IsaPushArrayZero(arena, type, 1)
 
-#define IsaNewSlice(arena, len, esize)                                                                                 \
-    {                                                                                                                  \
-        len, esize, (u8 *)IsaArenaPushZero(arena, len *esize)                                                          \
-    }
+#define IsaNewSlice(arena, len, esize) { len, esize, (u8 *)IsaArenaPushZero(arena, len * esize) }
 
 #define ISA_DEFINE_POOL_ALLOCATOR(type_name, func_name)                                                                \
     typedef struct type_name##_Pool                                                                                    \
@@ -602,10 +605,7 @@ IsaStrlen(const char *String)
     return Count;
 }
 
-#define IsaNewString(string)                                                                                           \
-    {                                                                                                                  \
-        IsaStrlen(string), string                                                                                      \
-    }
+#define IsaNewString(string) { IsaStrlen(string), string }
 
 ////////////////////////////////////////
 //            MEM TRACE               //
@@ -885,8 +885,8 @@ Isa__FreeTrace__(void *Pointer, const char *Function, int Line, const char *File
     return true;
 }
 
-// TODO(ingar): Pretty sure this code is busted. Considering I'm mostly going to be using arenas from now on, fixing
-// this isn't a priority
+// TODO(ingar): Pretty sure this code is busted. Considering I'm mostly going to
+// be using arenas from now on, fixing this isn't a priority
 #if 0
 bool
 IsaInitAllocationCollection(u64 Capacity)
@@ -1108,6 +1108,62 @@ IsaGetNextToken(char **Cursor)
     return Token;
 }
 
+long
+get_cache_size(int level)
+{
+    char filename[256];
+    char line[256];
+    long cache_size = -1;
+
+    snprintf(filename, sizeof(filename), "/sys/devices/system/cpu/cpu0/cache/index%d/size", level - 1);
+
+    FILE *file = fopen(filename, "r");
+    if(file == NULL)
+    {
+        return -1; // Cache level not found
+    }
+
+    if(fgets(line, sizeof(line), file) != NULL)
+    {
+        cache_size = strtol(line, NULL, 10);
+        // Convert to bytes if necessary
+        if(strstr(line, "K") != NULL)
+        {
+            cache_size *= 1024;
+        }
+        else if(strstr(line, "M") != NULL)
+        {
+            cache_size *= 1024 * 1024;
+        }
+    }
+
+    fclose(file);
+    return cache_size;
+}
+
+int
+get_cache_line_size(int level)
+{
+    char filename[256];
+    char line[256];
+    int  line_size = -1;
+
+    snprintf(filename, sizeof(filename), "/sys/devices/system/cpu/cpu0/cache/index%d/coherency_line_size", level - 1);
+
+    FILE *file = fopen(filename, "r");
+    if(file == NULL)
+    {
+        return -1; // Cache level not found
+    }
+
+    if(fgets(line, sizeof(line), file) != NULL)
+    {
+        line_size = atoi(line);
+    }
+
+    fclose(file);
+    return line_size;
+}
 #if defined(__cplusplus)
 ISA_END_EXTERN_C
 #endif
